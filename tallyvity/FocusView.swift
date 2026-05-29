@@ -758,8 +758,13 @@ struct FocusView: View {
                         if index < days.count {
                             let date = days[index]
                             let duration = workDuration(forDate: date, artifacts: allArtifacts)
+                            let isToday = Calendar.current.isDateInToday(date)
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(cellColor(for: duration))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 3)
+                                        .stroke(Color.primary.opacity(0.35), lineWidth: isToday ? 1.2 : 0)
+                                )
                                 .frame(maxWidth: .infinity)
                                 .aspectRatio(1, contentMode: .fit)
                         }
