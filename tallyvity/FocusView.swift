@@ -187,23 +187,14 @@ struct FocusView: View {
             Spacer()
 
             VStack(spacing: 44) {
-                VStack(spacing: 10) {
-                    Text("Dexar")
-                        .font(.system(size: 34, weight: .light, design: .rounded))
-                        .foregroundStyle(.primary)
+                VStack(spacing: 12) {
+                    Text("Work past 30 days")
+                        .font(.system(size: 11, weight: .medium))
+                        .kerning(1.4)
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
 
-                    // if let recall = session.memoryRecallText {
-                    //     Text(recall)
-                    //         .font(.callout)
-                    //         .foregroundStyle(.secondary)
-                    //         .multilineTextAlignment(.center)
-                    //         .padding(.horizontal, 40)
-                    //         .transition(.opacity)
-                    // } else if let checkpoint = session.pendingCheckpoint {
-                    //     resumePill(checkpoint: checkpoint)
-                    // } else if let latest = SessionStore.shared.latest {
-                    //     lastSessionPill(artifact: latest)
-                    // }
+                    activityGraph
                 }
 
                 timePickers
@@ -720,6 +711,59 @@ struct FocusView: View {
                 .padding(.horizontal, 32)
             Button("Dismiss") { session.cancelError() }
                 .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private var past30Days: [Date] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return (0..<30).reversed().compactMap { dayOffset in
+            calendar.date(byAdding: .day, value: -dayOffset, to: today)
+        }
+    }
+
+    private func workDuration(forDate date: Date, artifacts: [SessionArtifact]) -> TimeInterval {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        return artifacts
+            .filter { calendar.isDate($0.date, inSameDayAs: startOfDay) }
+            .compactMap { $0.totalDurationWorked }
+            .reduce(0, +)
+    }
+
+    private func cellColor(for duration: TimeInterval) -> Color {
+        if duration == 0 {
+            return Color(.systemGray6)
+        } else if duration < 600 {
+            return Color.purple.opacity(0.18)
+        } else if duration < 1500 {
+            return Color.purple.opacity(0.4)
+        } else if duration < 3000 {
+            return Color.purple.opacity(0.65)
+        } else {
+            return Color.purple
+        }
+    }
+
+    private var activityGraph: some View {
+        let days = past30Days
+        let allArtifacts = SessionStore.shared.loadAll()
+        
+        return HStack(spacing: 4) {
+            ForEach(0..<6, id: \.self) { col in
+                VStack(spacing: 4) {
+                    ForEach(0..<5, id: \.self) { row in
+                        let index = col * 5 + row
+                        if index < days.count {
+                            let date = days[index]
+                            let duration = workDuration(forDate: date, artifacts: allArtifacts)
+                            RoundedRectangle(cornerRadius: 2.5)
+                                .fill(cellColor(for: duration))
+                                .frame(width: 12, height: 12)
+                        }
+                    }
+                }
+            }
         }
     }
 }

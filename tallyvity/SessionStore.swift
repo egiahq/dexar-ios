@@ -21,6 +21,7 @@ struct SessionArtifact: Codable, Identifiable {
     var finalAnswers: [String]
     var totalDurationWorked: TimeInterval?
     var loopDurations: [TimeInterval]?
+    var progressRating: Int?
 }
 
 final class SessionStore {

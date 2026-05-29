@@ -17,6 +17,7 @@ struct SessionReportView: View {
     var onDismiss: () -> Void
 
     @State private var selectedPhotoForEnlargement: ReportPhoto? = nil
+    @State private var progressRating: Int?
 
     private var allPhotos: [ReportPhoto] {
         var list: [ReportPhoto] = []
@@ -39,11 +40,12 @@ struct SessionReportView: View {
     var body: some View {
         ZStack {
             Color(.systemBackground).ignoresSafeArea()
-
+ 
             ScrollView {
                 VStack(alignment: .leading, spacing: 32) {
                     header
                     if artifact.totalDurationWorked != nil { timeWorkedSection }
+                    progressRatingSelector
                     if beforeImage != nil || afterImage != nil { comparisonSection }
                     if loops.contains(where: { $0.score > 0 }) { scores }
                     if !artifact.finalAnswers.isEmpty { answersSection }
@@ -60,6 +62,9 @@ struct SessionReportView: View {
         }
         .fullScreenCover(item: $selectedPhotoForEnlargement) { reportPhoto in
             PhotoDetailView(image: reportPhoto.image, label: reportPhoto.label)
+        }
+        .onAppear {
+            progressRating = artifact.progressRating
         }
     }
 
@@ -305,6 +310,75 @@ struct SessionReportView: View {
             return "\(minutes)m"
         }
         return "\(seconds)s"
+    }
+
+    private var progressRatingSelector: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Rate your progress")
+                .font(.caption)
+                .kerning(1.2)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+
+            HStack(spacing: 14) {
+                ForEach(1...5, id: \.self) { level in
+                    Circle()
+                        .fill(progressFillColor(for: level))
+                        .overlay(
+                            Circle()
+                                .strokeBorder(progressBorderColor(for: level), lineWidth: 1.5)
+                        )
+                        .frame(width: 38, height: 38)
+                        .scaleEffect(progressScale(for: level))
+                        .contentShape(Circle())
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
+                                selectProgressRating(level)
+                            }
+                        }
+                }
+            }
+
+            if let progressRating {
+                Text(progressLabel(for: progressRating))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private func selectProgressRating(_ level: Int) {
+        progressRating = level
+        var updated = artifact
+        updated.progressRating = level
+        SessionStore.shared.save(updated)
+    }
+
+    private func progressFillColor(for level: Int) -> Color {
+        guard let progressRating else { return .clear }
+        return level <= progressRating ? .primary : .clear
+    }
+
+    private func progressScale(for level: Int) -> CGFloat {
+        guard let progressRating else { return 1.0 }
+        return progressRating == level ? 1.06 : 1.0
+    }
+
+    private func progressBorderColor(for level: Int) -> Color {
+        guard let progressRating else { return Color.primary.opacity(0.28) }
+        return level <= progressRating ? Color.primary.opacity(0.0) : Color.primary.opacity(0.28)
+    }
+
+    private func progressLabel(for level: Int) -> String {
+        switch level {
+        case 1: return "slow progress"
+        case 2: return "some progress"
+        case 3: return "steady progress"
+        case 4: return "great progress"
+        case 5: return "fully accomplished"
+        default: return ""
+        }
     }
 
     private var formattedDate: String {
