@@ -19,7 +19,7 @@ struct RootView: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+            Color.appBackground.ignoresSafeArea()
 
             if isBooting {
                 bootView
@@ -58,13 +58,13 @@ struct RootView: View {
         VStack(spacing: 24) {
             Text("Dexar")
                 .font(.system(size: 28, weight: .light, design: .rounded))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.appForeground)
 
-            BouncingDots(color: .secondary)
+            BouncingDots(color: Color.appMutedForeground)
 
             Text(bootMessages[messageIdx])
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appMutedForeground)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 48)
                 .animation(.easeInOut(duration: 0.5), value: messageIdx)

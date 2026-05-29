@@ -22,7 +22,7 @@ struct SessionHistoryView: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.appForeground)
                 }
             }
         }
@@ -109,11 +109,11 @@ struct SessionHistoryView: View {
                 }) {
                     Text("Discard")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.appMutedForeground)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 11)
-                        .background(Color(.tertiarySystemBackground))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .background(Color.appTertiaryBackground)
+                        .clipShape(Rectangle())
                 }
 
                 Button(action: {
@@ -124,18 +124,18 @@ struct SessionHistoryView: View {
                 }) {
                     Text("Resume")
                         .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Color.appPrimaryForeground)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 11)
-                        .background(Color.orange)
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .background(Color.appPrimary)
+                        .clipShape(Rectangle())
                 }
             }
         }
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16)
-                .fill(Color(.secondarySystemBackground))
+                .fill(Color.appSecondaryBackground)
         )
     }
 

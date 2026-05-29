@@ -19,7 +19,7 @@ struct FocusView: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+            Color.appBackground.ignoresSafeArea()
             phaseContent
         }
         .overlay(alignment: .topLeading) {
@@ -216,16 +216,16 @@ struct FocusView: View {
                     .frame(width: 6, height: 6)
                 Text(checkpoint.currentGoal.isEmpty ? "Session in progress" : checkpoint.currentGoal)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appMutedForeground)
                     .lineLimit(1)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.appMutedForeground.opacity(0.7))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(Color(.secondarySystemBackground))
-            .clipShape(Capsule())
+            .background(Color.appSecondaryBackground)
+            .clipShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -294,11 +294,11 @@ struct FocusView: View {
         }) {
             Text("Begin")
                 .font(.body.weight(.medium))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.appForeground)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .background(Color.appSecondaryBackground)
+                .clipShape(Rectangle())
         }
         .padding(.horizontal, 40)
     }
@@ -326,7 +326,7 @@ struct FocusView: View {
 
     private func workView(loopNumber: Int) -> some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+            Color.appBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 loopDots(current: loopNumber)
@@ -512,11 +512,11 @@ struct FocusView: View {
                         Text(session.isRecording ? "Stop Recording" : "Record Voice")
                             .font(.subheadline.weight(.semibold))
                     }
-                    .foregroundStyle(session.isRecording ? .red : .primary)
+                    .foregroundStyle(session.isRecording ? Color.appDestructive : Color.appForeground)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 12)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(Capsule())
+                    .background(Color.appSecondaryBackground)
+                    .clipShape(Rectangle())
                 }
                 .disabled(session.isProcessingSpeech && !session.isRecording)
             }
@@ -526,7 +526,7 @@ struct FocusView: View {
                 VStack(spacing: 8) {
                     Text("Prior tasks")
                         .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Color.appMutedForeground.opacity(0.7))
                         .textCase(.uppercase)
                         .kerning(1.2)
 
@@ -538,11 +538,11 @@ struct FocusView: View {
                                 }) {
                                     Text(g)
                                         .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                        .foregroundStyle(Color.appMutedForeground)
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 8)
-                                        .background(Color(.secondarySystemBackground))
-                                        .clipShape(Capsule())
+                                        .background(Color.appSecondaryBackground)
+                                        .clipShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -562,11 +562,11 @@ struct FocusView: View {
                 }) {
                     Text("Next")
                         .font(.headline.weight(.medium))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.appForeground)
                         .padding(.horizontal, 40)
                         .padding(.vertical, 16)
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(Capsule())
+                        .background(Color.appSecondaryBackground)
+                        .clipShape(Rectangle())
                 }
                 .transition(.opacity)
                 .padding(.bottom, 24)
@@ -620,11 +620,11 @@ struct FocusView: View {
                     Button(action: { showCamera = true }) {
                         Label("Photo", systemImage: "camera")
                             .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(Color.appForeground)
                             .padding(.horizontal, 20)
                             .padding(.vertical, 12)
-                            .background(Color(.secondarySystemBackground))
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .background(Color.appSecondaryBackground)
+                            .clipShape(Rectangle())
                     }
 
                     Button(action: session.skipPhoto) {
@@ -694,11 +694,11 @@ struct FocusView: View {
                         Text(hasPhoto ? "Photo captured" : "Take progress photo")
                     }
                     .font(.headline.weight(.medium))
-                    .foregroundStyle(hasPhoto ? .green : .primary)
+                    .foregroundStyle(hasPhoto ? .green : Color.appForeground)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .background(Color.appSecondaryBackground)
+                    .clipShape(Rectangle())
                 }
 
                 Button(action: {
@@ -706,11 +706,11 @@ struct FocusView: View {
                 }) {
                     Text("Work for 5 more minutes")
                         .font(.headline.weight(.medium))
-                        .foregroundStyle(.red)
+                        .foregroundStyle(Color.appDestructive)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(Color.red.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .background(Color.appDestructive.opacity(0.08))
+                        .clipShape(Rectangle())
                 }
 
                 Button(action: {
@@ -722,7 +722,7 @@ struct FocusView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
                         .background(Color.blue.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                        .clipShape(Rectangle())
                 }
             }
             .padding(.horizontal, 40)
@@ -868,11 +868,11 @@ struct SessionReadyView: View {
                 }) {
                     Text("Start Session")
                         .font(.headline.weight(.medium))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(Color.appForeground)
                         .padding(.horizontal, 32)
                         .padding(.vertical, 18)
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(Capsule())
+                        .background(Color.appSecondaryBackground)
+                        .clipShape(Rectangle())
                 }
             }
 

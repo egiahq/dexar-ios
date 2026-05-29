@@ -89,5 +89,5 @@ private struct TimerArc: Shape {
             .frame(width: 220, height: 220)
     }
     .padding(40)
-    .background(Color(.systemBackground))
+    .background(Color.appBackground)
 }

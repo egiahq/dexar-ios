@@ -35,5 +35,5 @@ struct BouncingDots: View {
         BouncingDots(dotSize: 10, spacing: 10, lift: 14)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(Color(.systemBackground))
+    .background(Color.appBackground)
 }

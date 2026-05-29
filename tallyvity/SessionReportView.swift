@@ -39,7 +39,7 @@ struct SessionReportView: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+            Color.appBackground.ignoresSafeArea()
  
             ScrollView {
                 VStack(alignment: .leading, spacing: 32) {
@@ -238,11 +238,11 @@ struct SessionReportView: View {
         Button(action: onDismiss) {
             Text("Done")
                 .font(.body.weight(.medium))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.appForeground)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 16)
-                .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .background(Color.appSecondaryBackground)
+                .clipShape(Rectangle())
         }
         .padding(.top, 8)
     }

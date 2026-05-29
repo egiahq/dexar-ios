@@ -92,8 +92,12 @@ struct SettingsView: View {
                 ProgressView().scaleEffect(0.8)
             } else if !gemma.isLoaded {
                 Button("Download") { Task { await gemma.load() } }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.appPrimaryForeground)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.appPrimary)
+                    .clipShape(Rectangle())
             } else {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)

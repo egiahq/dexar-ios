@@ -14,7 +14,7 @@ struct OnboardingView: View {
 
     var body: some View {
         ZStack {
-            Color(.systemBackground).ignoresSafeArea()
+            Color.appBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 Spacer()
@@ -42,21 +42,21 @@ struct OnboardingView: View {
         VStack(spacing: 32) {
             Text(PromptStore.shared.string(for: "onboarding_title"))
                 .font(.system(size: 34, weight: .light, design: .rounded))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.appForeground)
 
             Text(PromptStore.shared.string(for: "onboarding_subtitle"))
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appMutedForeground)
                 .multilineTextAlignment(.center)
                 .lineSpacing(4)
 
             VStack(spacing: 8) {
                 Text(PromptStore.shared.string(for: "onboarding_download_hint"))
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appMutedForeground)
                 Text(PromptStore.shared.string(for: "onboarding_models_info"))
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Color.appMutedForeground.opacity(0.7))
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
             }
@@ -64,11 +64,11 @@ struct OnboardingView: View {
             Button(action: startDownload) {
                 Text(PromptStore.shared.string(for: "onboarding_start_button"))
                     .font(.body.weight(.medium))
-                    .foregroundStyle(.primary)
+                    .foregroundStyle(Color.appForeground)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .background(Color.appSecondaryBackground)
+                    .clipShape(Rectangle())
             }
         }
     }
@@ -77,26 +77,26 @@ struct OnboardingView: View {
         VStack(spacing: 32) {
             Text(PromptStore.shared.string(for: "onboarding_setup_title"))
                 .font(.title3.weight(.regular))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.appForeground)
 
             VStack(spacing: 16) {
                 if let progress = speech.downloadProgress {
                     ProgressView(value: progress)
                         .progressViewStyle(.linear)
-                        .tint(.primary)
+                        .tint(Color.appForeground)
                 } else {
-                    BouncingDots(color: .secondary)
+                    BouncingDots(color: Color.appMutedForeground)
                 }
 
                 Text(speech.loadingMessage.isEmpty ? "Loading…" : speech.loadingMessage)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.appMutedForeground)
                     .multilineTextAlignment(.center)
             }
 
             Text(PromptStore.shared.string(for: "onboarding_setup_hint"))
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.appMutedForeground.opacity(0.7))
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
         }
@@ -111,11 +111,11 @@ struct OnboardingView: View {
         VStack(spacing: 28) {
             Text(PromptStore.shared.string(for: "onboarding_name_title"))
                 .font(.title3.weight(.regular))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.appForeground)
 
             Text(PromptStore.shared.string(for: "onboarding_name_hint"))
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.appMutedForeground.opacity(0.7))
                 .multilineTextAlignment(.center)
 
             TextField(PromptStore.shared.string(for: "onboarding_name_placeholder"), text: $name)
@@ -126,17 +126,17 @@ struct OnboardingView: View {
                 .focused($fieldFocused)
                 .padding(.vertical, 14)
                 .padding(.horizontal, 20)
-                .background(Color(.secondarySystemBackground))
+                .background(Color.appSecondaryBackground)
                 .clipShape(RoundedRectangle(cornerRadius: 12))
 
             Button(action: confirmName) {
                 Text(PromptStore.shared.string(for: "onboarding_continue_button"))
                     .font(.body.weight(.medium))
-                    .foregroundStyle(name.trimmingCharacters(in: .whitespaces).isEmpty ? .secondary : .primary)
+                    .foregroundStyle(name.trimmingCharacters(in: .whitespaces).isEmpty ? Color.appMutedForeground : Color.appForeground)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
-                    .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                    .background(Color.appSecondaryBackground)
+                    .clipShape(Rectangle())
             }
             .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
         }
@@ -147,11 +147,11 @@ struct OnboardingView: View {
         VStack(spacing: 24) {
             Text(PromptStore.shared.string(for: "onboarding_ready_prefix") + settings.userName + PromptStore.shared.string(for: "onboarding_ready_suffix"))
                 .font(.title3.weight(.regular))
-                .foregroundStyle(.primary)
+                .foregroundStyle(Color.appForeground)
 
             Text(PromptStore.shared.string(for: "onboarding_change_name_hint"))
                 .font(.caption)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.appMutedForeground.opacity(0.7))
                 .multilineTextAlignment(.center)
         }
     }

@@ -58,14 +58,14 @@ struct VoiceLoopView: View {
             Text(engine.state.label.uppercased())
                 .font(.caption)
                 .kerning(1.5)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appMutedForeground)
                 .animation(.easeInOut, value: engine.state.label)
 
             Text(engine.transcript.isEmpty ? PromptStore.shared.string(for: "tap_to_record") : engine.transcript)
                 .font(.title3)
                 .fontWeight(.regular)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(engine.transcript.isEmpty ? .tertiary : .primary)
+                .foregroundStyle(engine.transcript.isEmpty ? Color.appMutedForeground : Color.appForeground)
                 .padding(.horizontal, 32)
                 .animation(.easeInOut, value: engine.transcript)
         }
@@ -73,7 +73,7 @@ struct VoiceLoopView: View {
 
     private var recordButton: some View {
         Button(action: onRecordTap) {
-            Circle()
+            Rectangle()
                 .fill(buttonColor)
                 .frame(width: 72, height: 72)
                 .overlay {
@@ -99,14 +99,20 @@ struct VoiceLoopView: View {
         VStack(spacing: 24) {
             Image(systemName: "mic.slash")
                 .font(.system(size: 48))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appMutedForeground)
             Text(PromptStore.shared.string(for: "mic_access_required"))
                 .font(.title3)
+                .foregroundStyle(Color.appForeground)
             Text(PromptStore.shared.string(for: "mic_access_settings"))
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appMutedForeground)
             Button("Open Settings") { engine.openSettings() }
-                .buttonStyle(.borderedProminent)
+                .font(.body.weight(.medium))
+                .foregroundStyle(Color.appPrimaryForeground)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .background(Color.appPrimary)
+                .clipShape(Rectangle())
         }
         .padding(32)
     }

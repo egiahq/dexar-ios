@@ -27,11 +27,11 @@ struct RotaryTimePicker: View {
                 .font(.system(size: 10, weight: .medium))
                 .kerning(1.6)
                 .textCase(.uppercase)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.appMutedForeground.opacity(0.7))
 
             ZStack {
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(.tertiarySystemBackground))
+                    .fill(Color.appTertiaryBackground)
                     .frame(height: itemHeight)
                     .padding(.horizontal, 8)
 
@@ -46,7 +46,7 @@ struct RotaryTimePicker: View {
                                 weight: dist < 0.35 ? .semibold : .light,
                                 design: .rounded
                             ))
-                            .foregroundStyle(.primary)
+                            .foregroundStyle(Color.appForeground)
                             .lineLimit(1)
                             .fixedSize()
                             .opacity(dist < 3 ? opacity(dist: dist) : 0)
@@ -78,7 +78,7 @@ struct RotaryTimePicker: View {
 
             Text(unit)
                 .font(.system(size: 12, weight: .light))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.appMutedForeground.opacity(0.7))
         }
     }
 

@@ -14,7 +14,7 @@ struct LLMDemoView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                Color(.systemBackground).ignoresSafeArea()
+                Color.appBackground.ignoresSafeArea()
                 switch gemma.state {
                 case .idle:
                     notLoadedView
@@ -154,7 +154,7 @@ struct LLMDemoView: View {
                 Button(action: runInference) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 28))
-                        .foregroundStyle(canSend ? .primary : .quaternary)
+                        .foregroundStyle(canSend ? Color.appForeground : Color.appMutedForeground.opacity(0.3))
                 }
                 .disabled(!canSend)
             }
@@ -167,14 +167,19 @@ struct LLMDemoView: View {
         VStack(spacing: 20) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 40))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appMutedForeground)
             Text(message)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.appMutedForeground)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 32)
             Button("Dismiss") { gemma.cancelError() }
-                .buttonStyle(.borderedProminent)
+                .font(.body.weight(.medium))
+                .foregroundStyle(Color.appPrimaryForeground)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .background(Color.appPrimary)
+                .clipShape(Rectangle())
         }
     }
 
@@ -244,8 +249,8 @@ struct MessageBubble: View {
                         .font(.body)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 10)
-                        .background(message.role == .user ? Color(.label) : Color(.secondarySystemBackground))
-                        .foregroundStyle(message.role == .user ? Color(.systemBackground) : Color(.label))
+                        .background(message.role == .user ? Color.appForeground : Color.appSecondaryBackground)
+                        .foregroundStyle(message.role == .user ? Color.appBackground : Color.appForeground)
                         .clipShape(RoundedRectangle(cornerRadius: 18))
                 }
             }
