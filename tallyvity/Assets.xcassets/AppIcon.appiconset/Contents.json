@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "tally_logo_1024.jpg",
+      "filename" : "dexar_icon.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -13,7 +13,7 @@
           "value" : "dark"
         }
       ],
-      "filename" : "tallyvity_logo_dark_1024.jpg",
+      "filename" : "dexar_icon 1.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -25,7 +25,7 @@
           "value" : "tinted"
         }
       ],
-      "filename" : "tally_logo_1024 1.jpg",
+      "filename" : "dexar_icon 2.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"

@@ -5,6 +5,7 @@ final class SettingsStore {
 
     enum WhisperModel: String, CaseIterable, Identifiable {
         case tiny   = "openai_whisper-tiny"
+        case base   = "openai_whisper-base"
         case small  = "openai_whisper-small_216MB"
         case large  = "openai_whisper-large-v3-v20240930_626MB"
 
@@ -12,8 +13,9 @@ final class SettingsStore {
 
         var displayName: String {
             switch self {
-            case .tiny:  "Tiny · fastest, lower accuracy"
-            case .small: "Small · balanced (recommended)"
+            case .tiny:  "Tiny · fastest, light (recommended)"
+            case .base:  "Base · fast, balanced"
+            case .small: "Small · balanced"
             case .large: "Large · best accuracy, slow"
             }
         }
@@ -59,7 +61,7 @@ final class SettingsStore {
 
     init() {
         let m = defaults.string(forKey: "whisperModel") ?? ""
-        whisperModel = WhisperModel(rawValue: m) ?? .small
+        whisperModel = WhisperModel(rawValue: m) ?? .tiny
         let v = defaults.string(forKey: "voice") ?? ""
         voice = Voice(rawValue: v) ?? .dylan
         userName = defaults.string(forKey: "userName") ?? ""

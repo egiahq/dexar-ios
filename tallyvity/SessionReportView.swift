@@ -1,8 +1,12 @@
 import SwiftUI
+import UIKit
 
 struct SessionReportView: View {
     let loops: [LoopRecord]
     let artifact: SessionArtifact
+    var beforeImage: UIImage? = nil
+    var afterImage: UIImage? = nil
+    var comparison: String = ""
     var onDismiss: () -> Void
 
     var body: some View {
@@ -12,7 +16,8 @@ struct SessionReportView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 32) {
                     header
-                    scores
+                    if beforeImage != nil || afterImage != nil { comparisonSection }
+                    if loops.contains(where: { $0.score > 0 }) { scores }
                     if !artifact.finalAnswers.isEmpty { answersSection }
                     if let level = artifact.motivationLevel { motivationRow(level) }
                     if !artifact.blocker.isEmpty { blockerRow }
@@ -43,6 +48,55 @@ struct SessionReportView: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
+    }
+
+    private var comparisonSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Before / After")
+                .font(.caption)
+                .kerning(1.2)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+
+            HStack(spacing: 10) {
+                photoTile(label: "Before", image: beforeImage)
+                photoTile(label: "After", image: afterImage)
+            }
+
+            if !comparison.isEmpty {
+                Text(comparison)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                    .lineSpacing(3)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func photoTile(label: String, image: UIImage?) -> some View {
+        VStack(spacing: 6) {
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(height: 140)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color(.secondarySystemBackground))
+                    .frame(height: 140)
+                    .overlay(Text("—").foregroundStyle(.tertiary))
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var scores: some View {

@@ -2,7 +2,6 @@ import Foundation
 import AVFoundation
 import UIKit
 import WhisperKit
-import TTSKit
 
 @MainActor
 @Observable
@@ -32,12 +31,11 @@ final class SpeechEngine {
     }
 
     private var whisper: WhisperKit?
-    private var tts: TTSKit?
     private var loadTask: Task<Void, Never>?
     private var recorder: AVAudioRecorder?
     private var recordingURL: URL?
 
-    private var currentModel: SettingsStore.WhisperModel = .small
+    private var currentModel: SettingsStore.WhisperModel = .tiny
     private var currentVoice: SettingsStore.Voice = .ryan
 
     private var interruptionObserver: NSObjectProtocol?
@@ -53,7 +51,7 @@ final class SpeechEngine {
     }
 
     var isReady: Bool {
-        whisper != nil && tts != nil
+        whisper != nil
     }
 
     func requestPermissionAndLoad(settings: SettingsStore) async {
@@ -77,7 +75,6 @@ final class SpeechEngine {
         settings.whisperModel = model
         currentModel = model
         whisper = nil
-        tts = nil
         await loadModels(model: model, voice: voice)
     }
 
@@ -93,7 +90,6 @@ final class SpeechEngine {
         if isReady { return true }
 
         whisper = nil
-        tts = nil
         await loadModels(model: currentModel, voice: currentVoice)
         return isReady
     }
@@ -119,10 +115,7 @@ final class SpeechEngine {
         try? configureAudioSession()
         downloadProgress = nil
         do {
-            async let whisperResult = makeWhisper(model: model)
-            async let ttsResult = makeTTS(voice: voice)
-            whisper = try await whisperResult
-            tts = try await ttsResult
+            whisper = try await makeWhisper(model: model)
             downloadProgress = nil
             state = .idle
         } catch {
@@ -143,14 +136,6 @@ final class SpeechEngine {
         let w = try await WhisperKit(config)
         try await w.loadModels()
         return w
-    }
-
-    private func makeTTS(voice: SettingsStore.Voice) async throws -> TTSKit {
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let ttsBase = docs.appendingPathComponent("tts_models", isDirectory: true)
-        try? FileManager.default.createDirectory(at: ttsBase, withIntermediateDirectories: true)
-        let config = TTSKitConfig(model: .qwen3TTS_0_6b, downloadBase: ttsBase)
-        return try await TTSKit(config)
     }
 
     func startRecording() throws {
@@ -188,19 +173,6 @@ final class SpeechEngine {
             transcript = text
             try? FileManager.default.removeItem(at: url)
 
-            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                state = .idle
-                return
-            }
-
-            state = .speaking
-            guard let tts else { throw EngineError.notLoaded }
-            let session = AVAudioSession.sharedInstance()
-            try? session.setActive(false, options: .notifyOthersOnDeactivation)
-            try? session.setCategory(.playback, mode: .default)
-            try? session.setActive(true)
-            try await tts.play(text: text, voice: currentVoice.ttsVoice, language: "english")
-            try? configureAudioSession()
             state = .idle
         } catch {
             state = .error(error.localizedDescription)
@@ -218,25 +190,6 @@ final class SpeechEngine {
         try? session.setActive(false, options: .notifyOthersOnDeactivation)
         if state == .recording || state == .speaking || state == .transcribing {
             state = .idle
-        }
-    }
-
-    func speak(text: String) async {
-        cuePlayer?.stop()
-        cuePlayer = nil
-        recorder?.stop()
-        recorder = nil
-        guard let tts else { return }
-        do {
-            state = .speaking
-            let session = AVAudioSession.sharedInstance()
-            try? session.setCategory(.playback, mode: .default)
-            try? session.setActive(true)
-            try await tts.play(text: text, voice: currentVoice.ttsVoice, language: "english")
-            try? configureAudioSession()
-            if case .speaking = state { state = .idle }
-        } catch {
-            if case .speaking = state { state = .idle }
         }
     }
 
@@ -355,20 +308,4 @@ final class SpeechEngine {
 private enum EngineError: LocalizedError {
     case notLoaded
     var errorDescription: String? { "Models not loaded yet." }
-}
-
-extension SettingsStore.Voice {
-    var ttsVoice: String {
-        switch self {
-        case .ryan:    "ryan"
-        case .aiden:   "aiden"
-        case .onoAnna: "ono_anna"
-        case .sohee:   "sohee"
-        case .eric:    "eric"
-        case .dylan:   "dylan"
-        case .serena:  "serena"
-        case .vivian:  "vivian"
-        case .uncleFu: "uncle_fu"
-        }
-    }
 }

@@ -88,13 +88,6 @@ struct FocusView: View {
         case .photoDelta:
             photoPromptView(isBaseline: false)
 
-        case .qaPlayback(let i, _):
-            qaView(questionIndex: i)
-
-        case .selfScore(_):
-            selfScoreView
-                .transition(.opacity)
-
         case .storing:
             transitionView(text: "Storing…", showContinue: false)
 
@@ -109,6 +102,9 @@ struct FocusView: View {
                 SessionReportView(
                     loops: session.completedLoops,
                     artifact: artifact,
+                    beforeImage: session.baselinePhoto,
+                    afterImage: session.finalPhoto,
+                    comparison: session.comparisonText,
                     onDismiss: session.dismissReport
                 )
             }
@@ -286,23 +282,6 @@ struct FocusView: View {
         }
     }
 
-    private var selfScoreView: some View {
-        VStack(spacing: 40) {
-            Spacer()
-            ScoreSelector(
-                onSelect: { score in
-                    session.submitScore(score)
-                },
-                onTapRate: {
-                    session.playRateCue()
-                }
-            )
-            Spacer()
-            sessionControls(canSkip: false)
-                .padding(.bottom, 48)
-        }
-    }
-
     // MARK: - Work timer
 
     private func workView(loopNumber: Int) -> some View {
@@ -321,6 +300,17 @@ struct FocusView: View {
                     remainingTime: session.remainingTime
                 )
                 .frame(width: 280, height: 280)
+
+                if !session.spokenLine.isEmpty {
+                    Text(session.spokenLine)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 36)
+                        .padding(.top, 24)
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.2), value: session.spokenLine)
+                }
 
                 Spacer()
 
@@ -528,81 +518,6 @@ struct FocusView: View {
         .frame(height: 36)
         .padding(.bottom, 20)
         .animation(.easeInOut(duration: 0.2), value: session.isRecording)
-    }
-
-    // MARK: - Q&A
-
-    private func qaView(questionIndex: Int) -> some View {
-        VStack(spacing: 0) {
-
-            // Goal anchor — always visible at top
-            VStack(spacing: 6) {
-                Text("Goal")
-                    .font(.system(size: 10, weight: .medium))
-                    .kerning(1.6)
-                    .foregroundStyle(.tertiary)
-                    .textCase(.uppercase)
-                Text(session.currentGoal)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .lineLimit(2)
-                    .padding(.horizontal, 36)
-            }
-            .padding(.top, 56)
-
-            Spacer()
-
-            // Question + answer
-            VStack(spacing: 24) {
-                // Step indicator
-                Text("\(questionIndex + 1) / 3")
-                    .font(.system(size: 11, weight: .medium))
-                    .kerning(1.2)
-                    .foregroundStyle(.tertiary)
-
-                // Question
-                Text(session.currentQuestion)
-                    .font(.title3.weight(session.isProcessingSpeech ? .regular : .semibold))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(session.isProcessingSpeech ? Color(.secondaryLabel) : .primary)
-                    .padding(.horizontal, 36)
-                    .id(session.currentQuestion)   // forces re-render on question change
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
-                    .animation(.easeOut(duration: 0.3), value: session.currentQuestion)
-                    .animation(.easeInOut(duration: 0.2), value: session.isProcessingSpeech)
-
-                // Live answer — only shown when non-empty (cleared at start of each listen)
-                if !session.transcript.isEmpty {
-                    Text(session.transcript)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 36)
-                        .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.2), value: session.transcript)
-                }
-
-                recordingIndicator
-            }
-
-            Spacer()
-
-            // Done button
-            if session.isRecording && !session.usesAutoStopCapture {
-                Button(action: session.stopListening) {
-                    Text("Next")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 10)
-                        .background(Color(.secondarySystemBackground))
-                        .clipShape(Capsule())
-                }
-                .transition(.opacity)
-                .padding(.bottom, 52)
-            }
-        }
     }
 
     // MARK: - Photo

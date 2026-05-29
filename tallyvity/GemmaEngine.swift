@@ -39,7 +39,7 @@ final class GemmaEngine {
         guard !isLoaded else { return }
         state = .loading
         do {
-            let config = VLMRegistry.gemma4_E2B_it_4bit
+            let config = ModelConfiguration(id: "mlx-community/gemma-4-e2b-it-4bit")
             let downloader = HubDownloader()
             let loader = HFTokenizerLoader()
             let loaded = try await VLMModelFactory.shared.loadContainer(
@@ -103,6 +103,37 @@ final class GemmaEngine {
             state = .ready
         } catch {
             state = .error(error.localizedDescription)
+        }
+    }
+
+    func compareImages(_ first: UIImage, _ second: UIImage, prompt: String) async -> String {
+        guard let container else { return "" }
+        state = .generating
+        let firstN = first.normalizedForVLM()
+        let secondN = second.normalizedForVLM()
+        let ci1 = firstN.cgImage.map { CIImage(cgImage: $0) } ?? CIImage(image: firstN)
+        let ci2 = secondN.cgImage.map { CIImage(cgImage: $0) } ?? CIImage(image: secondN)
+        guard let ci1, let ci2 else { state = .ready; return "" }
+        let content = [["type": "image"], ["type": "image"], ["type": "text", "text": prompt]] as [[String: String]]
+        do {
+            let userInput = UserInput(
+                prompt: .messages([["role": "user", "content": content]]),
+                images: [.ciImage(ci1), .ciImage(ci2)]
+            )
+            let lmInput = try await container.prepare(input: userInput)
+            let stream = try await container.generate(
+                input: lmInput,
+                parameters: GenerateParameters(maxTokens: 512)
+            )
+            var result = ""
+            for await event in stream {
+                if case .chunk(let text) = event { result += text }
+            }
+            state = .ready
+            return result.trimmingCharacters(in: .whitespacesAndNewlines)
+        } catch {
+            state = .error(error.localizedDescription)
+            return ""
         }
     }
 

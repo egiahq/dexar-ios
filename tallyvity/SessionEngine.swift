@@ -30,8 +30,6 @@ final class SessionEngine {
         case workActive(loopNumber: Int)
         case roundEnd
         case photoDelta
-        case qaPlayback(questionIndex: Int, loopNumber: Int)
-        case selfScore(loopNumber: Int)
         case storing
         case breakTime(loopNumber: Int)
         case nextSessionCountdown(loopNumber: Int)
@@ -46,8 +44,6 @@ final class SessionEngine {
                  (.storing, .storing), (.sessionReady, .sessionReady), (.sessionReport, .sessionReport): return true
             case (.backgroundPrep(let a), .backgroundPrep(let b)): return a == b
             case (.workActive(let a), .workActive(let b)): return a == b
-            case (.qaPlayback(let q1, let l1), .qaPlayback(let q2, let l2)): return q1 == q2 && l1 == l2
-            case (.selfScore(let a), .selfScore(let b)): return a == b
             case (.breakTime(let a), .breakTime(let b)): return a == b
             case (.nextSessionCountdown(let a), .nextSessionCountdown(let b)): return a == b
             case (.error(let a), .error(let b)): return a == b
@@ -70,11 +66,14 @@ final class SessionEngine {
     private(set) var memoryRecallText: String? = nil
     private(set) var isRecording: Bool = false
     private(set) var transcript: String = ""
-    private(set) var currentQuestion: String = ""
     private(set) var completedLoops: [LoopRecord] = []
     private(set) var finalArtifact: SessionArtifact? = nil
     private(set) var currentLoopAnswers: [String] = []
     private(set) var pendingCheckpoint: SessionStore.SessionCheckpoint? = nil
+    private(set) var spokenLine: String = ""
+    private(set) var baselinePhoto: UIImage? = nil
+    private(set) var finalPhoto: UIImage? = nil
+    private(set) var comparisonText: String = ""
 
     private let speech: SpeechEngine
     private let gemma: GemmaEngine
@@ -82,8 +81,6 @@ final class SessionEngine {
 
     private var sessionTask: Task<Void, Never>?
     private var timerTask: Task<Void, Never>?
-
-    private var prerenderedQuestions: [String] = PromptStore.shared.presets(for: "default_qa_questions")
 
     private var recordingStopped = false
     private var pendingPhoto: UIImage? = nil
@@ -93,22 +90,18 @@ final class SessionEngine {
     private var haptic = UIImpactFeedbackGenerator(style: .light)
     private var liveActivity: Activity<TallyvityAttributes>?
     private var sessionUserName: String = ""
-    private var scoreContinuation: CheckedContinuation<Int, Never>?
     private var motivationContinuation: CheckedContinuation<Int, Never>?
-    private var pendingScore: Int?
     private var pendingMotivation: Int?
     private var sessionMotivationLevel: Int?
     private var needsStarterDecision: Bool = false
     private var wantsToRetryGoal: Bool = false
     private var wantsToGoBackToGoal: Bool = false
     private var wantsToStartNow: Bool = false
-    private var baselinePhotoSummary: String? = nil
     private var startSessionContinuation: CheckedContinuation<Void, Never>?
     private var workStartPrompts: [String] { PromptStore.shared.presets(for: "work_start") }
     private var goalPromptPresets: [String] { PromptStore.shared.presets(for: "goal_capture") }
     private var photoPromptPresets: [String] { PromptStore.shared.presets(for: "photo_baseline") }
     private var roundEndPresets: [String] { PromptStore.shared.presets(for: "round_end") }
-    private var scorePromptPresets: [String] { PromptStore.shared.presets(for: "self_score") }
     private var breakRecoveryPresets: [String] { PromptStore.shared.presets(for: "break_recovery") }
     private var breakPromptPresets: [String] { PromptStore.shared.presets(for: "break_start") }
     private var nextSessionPromptPresets: [String] { PromptStore.shared.presets(for: "next_session") }
@@ -158,20 +151,14 @@ final class SessionEngine {
 
         // Force-stop any active capture loop and release waiting UI continuations.
         recordingStopped = true
-        if let scoreContinuation {
-            self.scoreContinuation = nil
-            scoreContinuation.resume(returning: 3)
-        }
         if let motivationContinuation {
             self.motivationContinuation = nil
             motivationContinuation.resume(returning: 3)
         }
-        pendingScore = nil
         pendingMotivation = nil
 
         // Reset per-session transient state so a new start cannot reuse stale values.
         currentLoopAnswers = []
-        currentQuestion = ""
         transcript = ""
         isRecording = false
         pendingPhoto = nil
@@ -181,7 +168,6 @@ final class SessionEngine {
         wantsToRetryGoal = false
         wantsToGoBackToGoal = false
         wantsToStartNow = false
-        baselinePhotoSummary = nil
         startSessionContinuation?.resume()
         startSessionContinuation = nil
 
@@ -216,15 +202,10 @@ final class SessionEngine {
             memoryRecallText = nil
             timerProgress = 0
             timerElapsed = 0
-        }
-    }
-
-    func submitScore(_ score: Int) {
-        if let continuation = scoreContinuation {
-            scoreContinuation = nil
-            continuation.resume(returning: score)
-        } else {
-            pendingScore = score
+            baselinePhoto = nil
+            finalPhoto = nil
+            comparisonText = ""
+            spokenLine = ""
         }
     }
 
@@ -334,8 +315,10 @@ final class SessionEngine {
         memoryRecallText = nil
         finalArtifact = nil
         sessionMotivationLevel = motivation
-        prerenderedQuestions = PromptStore.shared.presets(for: "default_qa_questions")
-        baselinePhotoSummary = nil
+        baselinePhoto = nil
+        finalPhoto = nil
+        comparisonText = ""
+        spokenLine = ""
         needsStarterDecision = motivation <= 2
 
         if needsStarterDecision {
@@ -392,15 +375,6 @@ final class SessionEngine {
                 }
                 Task { [weak self] in
                     guard let self else { return }
-                    await gemma.generate(prompt: GemmaPrompts.generateQuestions(goal: currentGoal))
-                    let output = gemma.output
-                    let qs = output.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-                    if qs.count >= 3 {
-                        prerenderedQuestions = Array(qs.prefix(3))
-                    }
-                }
-                Task { [weak self] in
-                    guard let self else { return }
                     await gemma.generate(prompt: GemmaPrompts.shortTitle(goal: currentGoal))
                     let output = gemma.output.trimmingCharacters(in: .whitespacesAndNewlines)
                     if !output.isEmpty { self.shortGoal = output }
@@ -419,9 +393,7 @@ final class SessionEngine {
                 let deadline = Date().addingTimeInterval(15)
                 while !Task.isCancelled && !photoSkipped && !wantsToGoBackToGoal && Date() < deadline {
                     if let photo = pendingPhoto {
-                        await gemma.generate(image: photo, prompt: "Describe visible workspace facts only in one sentence.")
-                        let summary = gemma.output.trimmingCharacters(in: .whitespacesAndNewlines)
-                        baselinePhotoSummary = summary.isEmpty ? nil : summary
+                        baselinePhoto = photo
                         break
                     }
                     try? await Task.sleep(for: .milliseconds(100))
@@ -502,20 +474,12 @@ final class SessionEngine {
 
         guard !Task.isCancelled else { return .finish }
 
-        withAnimation { phase = .selfScore(loopNumber: currentLoopNumber) }
-        sayFixedNonBlocking(cue: "self_score_prompt", fallback: selectVoiceLine(
-            cue: "self_score",
-            fallback: scorePromptPresets,
-            replacements: ["goal": currentGoal]
-        ))
-        let score = await waitForScore()
-
         withAnimation {
             phase = .storing
             completedLoops.append(LoopRecord(
                 goalText: currentGoal,
                 answers: [],
-                score: score,
+                score: 0,
                 scoreReason: ""
             ))
         }
@@ -535,19 +499,6 @@ final class SessionEngine {
         if !isLong { currentLoopNumber += 1 }
         persistCheckpoint()
         return .continueNext
-    }
-
-    private func runFinalQA() async -> [String] {
-        var answers: [String] = []
-        for i in 0..<3 {
-            guard !Task.isCancelled else { return answers }
-            withAnimation { phase = .qaPlayback(questionIndex: i, loopNumber: currentLoopNumber) }
-            withAnimation { currentQuestion = prerenderedQuestions[i] }
-            await say(prerenderedQuestions[i])
-            let answer = await listen(maxDuration: 30, silenceThreshold: 3.0)
-            answers.append(answer)
-        }
-        return answers
     }
 
     private func runBreak() async -> SessionFlowAction {
@@ -721,30 +672,21 @@ final class SessionEngine {
 
     private func say(_ text: String) async {
         guard !text.isEmpty, !Task.isCancelled else { return }
-        await speech.speak(text: text)
+        withAnimation { spokenLine = text }
     }
 
     private func sayFixed(cue: String, fallback: String) async {
         guard !Task.isCancelled else { return }
-        if await speech.playCueAndWait(named: cue) {
-            return
-        }
         await say(fallback)
     }
 
     private func sayNonBlocking(_ text: String) {
         guard !text.isEmpty else { return }
-        Task { [weak self] in
-            guard let self, !Task.isCancelled else { return }
-            await self.speech.speak(text: text)
-        }
+        withAnimation { spokenLine = text }
     }
 
     private func sayFixedNonBlocking(cue: String, fallback: String) {
-        Task { [weak self] in
-            guard let self, !Task.isCancelled else { return }
-            await self.sayFixed(cue: cue, fallback: fallback)
-        }
+        sayNonBlocking(fallback)
     }
 
     private func listen(maxDuration: TimeInterval, silenceThreshold: TimeInterval = 2.5) async -> String {
@@ -863,16 +805,6 @@ final class SessionEngine {
         }
     }
 
-    private func waitForScore() async -> Int {
-        if let pendingScore {
-            self.pendingScore = nil
-            return pendingScore
-        }
-        return await withCheckedContinuation { cont in
-            scoreContinuation = cont
-        }
-    }
-
     private func waitForMotivation() async -> Int {
         if let pendingMotivation {
             self.pendingMotivation = nil
@@ -927,9 +859,26 @@ final class SessionEngine {
             }
         }
         guard !Task.isCancelled else { return }
-        let finalAnswers = await runFinalQA()
+        await capturePhotoDelta()
         guard !Task.isCancelled else { return }
-        await finishSession(finalAnswers: finalAnswers)
+        await finishSession()
+    }
+
+    private func capturePhotoDelta() async {
+        guard let baseline = baselinePhoto, !Task.isCancelled else { return }
+        withAnimation { phase = .photoDelta }
+        pendingPhoto = nil
+        photoSkipped = false
+        let final = await waitForPhoto(timeout: 60)
+        guard !Task.isCancelled else { return }
+        guard let final else { return }
+        withAnimation { finalPhoto = final }
+        let prompt = """
+        The first image is a workspace at the START of a focus session. The second image is the SAME workspace at the END. The goal was: \(currentGoal).
+        Describe the concrete visual differences between the two images and what progress they show. Be specific and factual. Two or three sentences.
+        """
+        let result = await gemma.compareImages(baseline, final, prompt: prompt)
+        withAnimation { comparisonText = result }
     }
 
     private func resumeSession(from checkpoint: SessionStore.SessionCheckpoint) async {
@@ -958,9 +907,9 @@ final class SessionEngine {
                 await mainLoop()
             } else {
                 guard !Task.isCancelled else { return }
-                let finalAnswers = await runFinalQA()
+                await capturePhotoDelta()
                 guard !Task.isCancelled else { return }
-                await finishSession(finalAnswers: finalAnswers)
+                await finishSession()
             }
         } else {
             await mainLoop()
