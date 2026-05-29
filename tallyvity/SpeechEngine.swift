@@ -169,8 +169,14 @@ final class SpeechEngine {
         do {
             guard let whisper else { throw EngineError.notLoaded }
             let results = try await whisper.transcribe(audioPath: url.path)
-            let text = results.map(\.text).joined(separator: " ")
-            transcript = text
+            let text = results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                if transcript.isEmpty {
+                    transcript = text
+                } else {
+                    transcript += " " + text
+                }
+            }
             try? FileManager.default.removeItem(at: url)
 
             state = .idle
@@ -186,8 +192,6 @@ final class SpeechEngine {
         recorder = nil
         cuePlayer?.stop()
         cuePlayer = nil
-        let session = AVAudioSession.sharedInstance()
-        try? session.setActive(false, options: .notifyOthersOnDeactivation)
         if state == .recording || state == .speaking || state == .transcribing {
             state = .idle
         }

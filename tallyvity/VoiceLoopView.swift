@@ -32,6 +32,18 @@ struct VoiceLoopView: View {
 
     private var mainContent: some View {
         VStack(spacing: 48) {
+            Group {
+                if engine.state == .recording {
+                    RecordingPulse()
+                } else if engine.state == .transcribing {
+                    ProgressView()
+                } else {
+                    Color.clear.frame(height: 20)
+                }
+            }
+            .frame(height: 20)
+            .padding(.top, 16)
+
             Spacer()
             transcriptSection
             Spacer()

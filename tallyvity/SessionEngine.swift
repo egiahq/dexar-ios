@@ -306,6 +306,16 @@ final class SessionEngine {
     }
 
     func selectRoundEndAction(_ choice: RoundEndChoice) {
+        recordingStopped = true
+        speech.stopAll()
+        withAnimation {
+            switch choice {
+            case .workFiveMore:
+                phase = .backgroundPrep(loopNumber: currentLoopNumber)
+            case .startBreak:
+                phase = .storing
+            }
+        }
         if let continuation = roundEndContinuation {
             continuation.resume(returning: choice)
             roundEndContinuation = nil
@@ -417,34 +427,13 @@ final class SessionEngine {
                 if wantsToRetryGoal { continue }
 
                 currentGoal = transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Focus session" : transcript
+                shortGoal = String(currentGoal.prefix(20))
                 goalAccepted = true
             }
 
             guard !Task.isCancelled else { return }
 
             if !wantsToStartNow {
-                // Start background generations (non-blocking)
-                Task { [weak self] in
-                    await self?.generateDynamicVoiceLines(for: self?.currentGoal ?? "")
-                }
-                Task { [weak self] in
-                    guard let self else { return }
-                    let relevant = store.findRelevant(for: currentGoal)
-                    if let prompt = GemmaPrompts.memoryRecall(name: userName, goal: currentGoal, relevant: relevant) {
-                        await gemma.generate(prompt: prompt)
-                        let output = gemma.output.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if output != "SKIP" && !output.isEmpty {
-                            withAnimation { self.memoryRecallText = output }
-                        }
-                    }
-                }
-                Task { [weak self] in
-                    guard let self else { return }
-                    await gemma.generate(prompt: GemmaPrompts.shortTitle(goal: currentGoal))
-                    let output = gemma.output.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !output.isEmpty { self.shortGoal = output }
-                }
-
                 // 2. Photo baseline
                 await sayFixed(cue: "photo_baseline_prompt", fallback: selectVoiceLine(
                     cue: "photo_baseline",
@@ -770,7 +759,6 @@ final class SessionEngine {
         recordingStopped = false
         withAnimation {
             isRecording = true
-            transcript = ""   // clear stale text before each new capture
         }
         try? speech.startRecording()
 
@@ -793,7 +781,15 @@ final class SessionEngine {
 
         withAnimation { isRecording = false }
         let text = await speech.transcribeRecording()
-        withAnimation { transcript = text }
+        withAnimation {
+            if !text.isEmpty {
+                if transcript.isEmpty {
+                    transcript = text
+                } else {
+                    transcript += " " + text
+                }
+            }
+        }
         return text
     }
 
@@ -827,60 +823,7 @@ final class SessionEngine {
         return line
     }
 
-    private func generateDynamicVoiceLines(for goal: String) async {
-        let prompt = """
-        Create short supportive spoken lines for a focus coach app.
-        Goal: \(goal)
 
-        Return ONLY valid JSON object with these keys:
-        - photo_baseline
-        - round_end
-        - self_score
-        - break_start
-        - next_session
-        - session_done
-
-        Rules:
-        - Each key: array of exactly 5 strings.
-        - Each string must be 3 to 10 words.
-        - Tone: calm, encouraging, low-pressure.
-        - Mention the goal naturally in some lines.
-        - Use placeholders when needed:
-          - {goal}
-          - {breakMinutes}
-          - {sessionNumber}
-        - No exclamation marks.
-        - No markdown, no extra text.
-        """
-
-        await gemma.generate(prompt: prompt)
-        let raw = gemma.output
-        guard let data = raw.data(using: .utf8),
-              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: [String]] else {
-            return
-        }
-
-        var normalized: [String: [String]] = [:]
-        for (key, values) in dict {
-            let cleaned = values
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                .filter { !$0.isEmpty }
-                .map { sentence in
-                    let words = sentence.split(separator: " ")
-                    if words.count > 10 {
-                        return words.prefix(10).joined(separator: " ")
-                    }
-                    return sentence
-                }
-            if !cleaned.isEmpty {
-                normalized[key] = Array(cleaned.prefix(5))
-            }
-        }
-
-        if !normalized.isEmpty {
-            generatedVoiceLines = normalized
-        }
-    }
 
     private func waitForMotivation() async -> Int {
         if let pendingMotivation {

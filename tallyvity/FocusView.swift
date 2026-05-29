@@ -312,16 +312,7 @@ struct FocusView: View {
                 )
                 .frame(width: 280, height: 280)
 
-                if !session.spokenLine.isEmpty {
-                    Text(session.spokenLine)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 36)
-                        .padding(.top, 24)
-                        .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.2), value: session.spokenLine)
-                }
+
 
                 Spacer()
 
@@ -455,20 +446,21 @@ struct FocusView: View {
 
     private func captureView(title: String, hint: String) -> some View {
         VStack(spacing: 0) {
+            Group {
+                if session.isRecording {
+                    RecordingPulse()
+                } else if session.isProcessingSpeech {
+                    ProgressView()
+                } else {
+                    Color.clear.frame(height: 20)
+                }
+            }
+            .frame(height: 20)
+            .padding(.top, 16)
+
             Spacer()
 
             VStack(spacing: 28) {
-                if session.isRecording {
-                    RecordingPulse()
-                        .frame(height: 20)
-                } else if session.isProcessingSpeech {
-                    ProgressView()
-                        .frame(height: 20)
-                } else {
-                    Spacer()
-                        .frame(height: 20)
-                }
-
                 Text(title.uppercased())
                     .font(.system(size: 10, weight: .medium))
                     .kerning(1.6)
@@ -627,7 +619,7 @@ struct FocusView: View {
 
             Text("Good.")
                 .font(.system(size: 22, weight: .light))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.gray)
 
             Spacer()
 
@@ -637,10 +629,10 @@ struct FocusView: View {
                 }) {
                     Text("Work for 5 more minutes")
                         .font(.headline.weight(.medium))
-                        .foregroundStyle(.primary)
+                        .foregroundStyle(.red)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(Color(.secondarySystemBackground))
+                        .background(Color.red.opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
 
@@ -649,10 +641,10 @@ struct FocusView: View {
                 }) {
                     Text("Start break")
                         .font(.headline.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.blue)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(Color(.quaternarySystemFill))
+                        .background(Color.blue.opacity(0.08))
                         .clipShape(RoundedRectangle(cornerRadius: 14))
                 }
             }
