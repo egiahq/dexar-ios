@@ -521,6 +521,38 @@ struct FocusView: View {
                 .disabled(session.isProcessingSpeech && !session.isRecording)
             }
 
+            let goals = priorGoals
+            if !goals.isEmpty {
+                VStack(spacing: 8) {
+                    Text("Prior tasks")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .textCase(.uppercase)
+                        .kerning(1.2)
+
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            ForEach(goals, id: \.self) { g in
+                                Button(action: {
+                                    goalTranscriptText = g
+                                }) {
+                                    Text(g)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 8)
+                                        .background(Color(.secondarySystemBackground))
+                                        .clipShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                    }
+                }
+                .padding(.top, 20)
+            }
+
             Spacer()
 
             if !session.isRecording && !session.isProcessingSpeech {
@@ -775,6 +807,19 @@ struct FocusView: View {
                 }
             }
         }
+    }
+
+    private var priorGoals: [String] {
+        let calendar = Calendar.current
+        let all = SessionStore.shared.loadAll()
+        var unique: [String] = []
+        for a in all {
+            let g = a.goal.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !g.isEmpty && !unique.contains(g) {
+                unique.append(g)
+            }
+        }
+        return Array(unique.prefix(4))
     }
 }
 
