@@ -169,6 +169,18 @@ struct SessionHistoryView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if let motivation = artifact.motivationLevel {
+                    Label("Mot: \(motivation)/5", systemImage: "bolt")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let progress = artifact.progressRating {
+                    Label("Prog: \(progress)/5", systemImage: "checkmark.circle")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 if !artifact.blocker.isEmpty {
                     Label("Blocked", systemImage: "exclamationmark.circle")
                         .font(.caption)
