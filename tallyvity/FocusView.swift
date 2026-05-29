@@ -8,6 +8,9 @@ struct FocusView: View {
     @State private var showSettings = false
     @State private var showCamera = false
     @State private var showHistory = false
+    @State private var showAnalytics = false
+    @State private var showResumeAlert = false
+    @State private var checkpointToResume: SessionStore.SessionCheckpoint? = nil
     @State private var focusMinutes = 25
     @State private var breakMinutes = 5
     @State private var loopCount = 4
@@ -48,6 +51,9 @@ struct FocusView: View {
         .sheet(isPresented: $showHistory) {
             SessionHistoryView(session: session, settings: settings)
         }
+        .sheet(isPresented: $showAnalytics) {
+            AnalyticsView()
+        }
         .sheet(isPresented: $showCamera) {
             CameraPickerView { image in
                 if session.phase == .roundEnd {
@@ -61,6 +67,22 @@ struct FocusView: View {
         }
         .task {
             session.loadPendingCheckpoint(userName: settings.userName)
+            if let cp = SessionStore.shared.loadCheckpoint() {
+                checkpointToResume = cp
+                showResumeAlert = true
+            }
+        }
+        .alert("Resume Session?", isPresented: $showResumeAlert, presenting: checkpointToResume) { cp in
+            Button("Resume") {
+                session.loadPendingCheckpoint(userName: settings.userName)
+                session.resumePendingSession()
+            }
+            Button("Discard", role: .destructive) {
+                session.discardPendingSession()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: { cp in
+            Text("Continue '\(cp.currentGoal.isEmpty ? "Untitled session" : cp.currentGoal)' at Loop \(cp.completedLoops.count + 1) (\(cp.phaseRaw == "break" ? "Break" : "Work")).")
         }
         .confirmationDialog(
             "End Session?",
@@ -167,10 +189,18 @@ struct FocusView: View {
     private var idleView: some View {
         VStack(spacing: 0) {
             HStack {
-                Button(action: { showHistory = true }) {
-                    Image(systemName: "clock")
-                        .font(.system(size: 20, weight: .light))
-                        .foregroundStyle(.secondary)
+                HStack(spacing: 24) {
+                    Button(action: { showHistory = true }) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 20, weight: .light))
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Button(action: { showAnalytics = true }) {
+                        Image(systemName: "chart.bar")
+                            .font(.system(size: 20, weight: .light))
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Spacer()
@@ -455,10 +485,18 @@ struct FocusView: View {
 
     private func sessionControls(canSkip: Bool) -> some View {
         HStack(spacing: 32) {
-            Button(action: { showEndAlert = true }) {
-                Text("End")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+            if session.phase == .goalCapture {
+                Button(action: session.backToMotivation) {
+                    Text("Back")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            } else {
+                Button(action: { showEndAlert = true }) {
+                    Text("End")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
             }
 
             if canSkip {
@@ -916,4 +954,485 @@ struct RecordingPulse: View {
         gemma: GemmaEngine(),
         settings: SettingsStore()
     )
+}
+
+struct AnalyticsView: View {
+    @Environment(\.dismiss) private var dismiss
+    
+    private var artifacts: [SessionArtifact] {
+        SessionStore.shared.loadAll()
+    }
+    
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    totalFocusCard
+                } header: {
+                    Text("Overview")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .kerning(1.2)
+                }
+                .listRowBackground(Color.appSecondaryBackground)
+                
+                Section {
+                    weeklyTrendCard
+                } header: {
+                    Text("Weekly Focus Trend")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .kerning(1.2)
+                }
+                .listRowBackground(Color.appSecondaryBackground)
+                
+                if !topCategories.isEmpty {
+                    Section {
+                        focusCategoriesCard
+                    } header: {
+                        Text("Focus Distribution")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .textCase(.uppercase)
+                            .kerning(1.2)
+                    }
+                    .listRowBackground(Color.appSecondaryBackground)
+                }
+                
+                Section {
+                    flowPacingCard
+                } header: {
+                    Text("Flow & Pacing Insights")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .kerning(1.2)
+                }
+                .listRowBackground(Color.appSecondaryBackground)
+                
+                Section {
+                    psychologicalWinsCard
+                } header: {
+                    Text("Psychological Resilience")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .kerning(1.2)
+                }
+                .listRowBackground(Color.appSecondaryBackground)
+                
+                Section {
+                    motivationCorrelationCard
+                } header: {
+                    Text("Quality by Starting Motivation")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                        .kerning(1.2)
+                }
+                .listRowBackground(Color.appSecondaryBackground)
+            }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(Color.appBackground)
+            .navigationTitle("Analytics")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundStyle(Color.appForeground)
+                }
+            }
+        }
+    }
+    
+    private var totalFocusCard: some View {
+        HStack(spacing: 20) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(formatTotalTime(totalSeconds: totalFocusSeconds))
+                    .font(.system(size: 32, weight: .light))
+                    .foregroundStyle(Color.appForeground)
+                Text("Total Focus Time")
+                    .font(.caption)
+                    .foregroundStyle(Color.appMutedForeground)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            
+            Divider()
+                .frame(height: 50)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(streakCount)")
+                    .font(.system(size: 32, weight: .light))
+                    .foregroundStyle(Color.appForeground)
+                Text("Day Streak")
+                    .font(.caption)
+                    .foregroundStyle(Color.appMutedForeground)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 8)
+    }
+    
+    private var weeklyTrendCard: some View {
+        let data = weeklyTrendData
+        let maxHours = max(1.0, data.map(\.hours).max() ?? 0.0)
+        
+        return VStack(spacing: 12) {
+            HStack(alignment: .bottom, spacing: 16) {
+                ForEach(data) { item in
+                    VStack(spacing: 8) {
+                        Spacer(minLength: 0)
+                        
+                        Text(String(format: "%.1fh", item.hours))
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(item.hours > 0 ? Color.appForeground : Color.clear)
+                        
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(item.hours > 0 ? Color.appForeground : Color.appMutedForeground.opacity(0.15))
+                            .frame(height: max(4, CGFloat(item.hours / maxHours) * 100))
+                        
+                        Text(item.label)
+                            .font(.system(size: 10, weight: .regular))
+                            .foregroundStyle(Color.appMutedForeground)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: 140)
+        }
+        .padding(.vertical, 8)
+    }
+    
+    private var focusCategoriesCard: some View {
+        let categories = topCategories
+        return VStack(spacing: 12) {
+            ForEach(categories) { category in
+                VStack(spacing: 6) {
+                    HStack {
+                        Text(category.name)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Color.appForeground)
+                        
+                        Spacer()
+                        
+                        Text(String(format: "%.0f%%", category.percentage))
+                            .font(.caption)
+                            .foregroundStyle(Color.appMutedForeground)
+                    }
+                    
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.appTertiaryBackground)
+                                .frame(height: 6)
+                            
+                            Capsule()
+                                .fill(Color.appForeground)
+                                .frame(width: geometry.size.width * CGFloat(category.percentage / 100.0), height: 6)
+                        }
+                    }
+                    .frame(height: 6)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
+    private var flowPacingCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 16) {
+                Image(systemName: "hourglass")
+                    .font(.title2)
+                    .foregroundStyle(Color.appMutedForeground)
+                    .frame(width: 28, height: 28)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Work-Break Harmony")
+                        .font(.subheadline.weight(.medium))
+                    Text(recoveryBalanceMessage)
+                        .font(.caption)
+                        .foregroundStyle(Color.appMutedForeground)
+                }
+            }
+            
+            Divider()
+            
+            HStack(alignment: .top, spacing: 16) {
+                Image(systemName: "sun.max.fill")
+                    .font(.title2)
+                    .foregroundStyle(Color.appMutedForeground)
+                    .frame(width: 28, height: 28)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Biological Focus Peak")
+                        .font(.subheadline.weight(.medium))
+                    Text(timeOfDayPeak)
+                        .font(.caption)
+                        .foregroundStyle(Color.appMutedForeground)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
+    private var psychologicalWinsCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 16) {
+                Image(systemName: "flame.fill")
+                    .font(.title2)
+                    .foregroundStyle(Color.appMutedForeground)
+                    .frame(width: 28, height: 28)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Showed Up Anyway")
+                        .font(.subheadline.weight(.medium))
+                    Text(showedUpAnywayMessage)
+                        .font(.caption)
+                        .foregroundStyle(Color.appMutedForeground)
+                }
+            }
+            
+            Divider()
+            
+            HStack(alignment: .top, spacing: 16) {
+                Image(systemName: "bolt.heart.fill")
+                    .font(.title2)
+                    .foregroundStyle(Color.appMutedForeground)
+                    .frame(width: 28, height: 28)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Average Session Focus Quality")
+                        .font(.subheadline.weight(.medium))
+                    Text(qualityMessage)
+                        .font(.caption)
+                        .foregroundStyle(Color.appMutedForeground)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
+    private var motivationCorrelationCard: some View {
+        let correlations = motivationCorrelations
+        
+        return VStack(spacing: 14) {
+            ForEach(correlations) { correlation in
+                VStack(spacing: 6) {
+                    HStack {
+                        Text(correlation.levelLabel)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(Color.appForeground)
+                        
+                        Spacer()
+                        
+                        Text(String(format: "%.1f / 5.0 quality", correlation.averageScore))
+                            .font(.caption)
+                            .foregroundStyle(Color.appMutedForeground)
+                    }
+                    
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.appTertiaryBackground)
+                                .frame(height: 6)
+                            
+                            Capsule()
+                                .fill(Color.appForeground)
+                                .frame(width: geometry.size.width * CGFloat(correlation.averageScore / 5.0), height: 6)
+                        }
+                    }
+                    .frame(height: 6)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
+    private var emptyState: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "chart.bar.xaxis")
+                .font(.system(size: 40, weight: .ultraLight))
+                .foregroundStyle(.tertiary)
+            
+            Text("Complete focus sessions to see insights")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    private var totalFocusSeconds: TimeInterval {
+        artifacts.compactMap { $0.totalDurationWorked }.reduce(0, +)
+    }
+    
+    private var streakCount: Int {
+        let calendar = Calendar.current
+        let dates = Array(Set(artifacts.map { calendar.startOfDay(for: $0.date) })).sorted(by: >)
+        guard !dates.isEmpty else { return 0 }
+        
+        let today = calendar.startOfDay(for: Date())
+        guard let first = dates.first,
+              first == today || calendar.isDate(first, inSameDayAs: calendar.date(byAdding: .day, value: -1, to: today)!) else {
+            return 0
+        }
+        
+        var streak = 1
+        for i in 0..<(dates.count - 1) {
+            if let diff = calendar.dateComponents([.day], from: dates[i+1], to: dates[i]).day, diff == 1 {
+                streak += 1
+            } else {
+                break
+            }
+        }
+        return streak
+    }
+    
+    private func formatTotalTime(totalSeconds: TimeInterval) -> String {
+        let hours = Int(totalSeconds) / 3600
+        let minutes = (Int(totalSeconds) % 3600) / 60
+        if hours > 0 {
+            return "\(hours)h \(minutes)m"
+        }
+        return "\(minutes)m"
+    }
+    
+    struct WeeklyFocus: Identifiable {
+        let id = UUID()
+        let label: String
+        let hours: Double
+    }
+    
+    private var weeklyTrendData: [WeeklyFocus] {
+        let calendar = Calendar.current
+        let now = Date()
+        var list: [WeeklyFocus] = []
+        
+        for offset in (0...3).reversed() {
+            guard let weekStart = calendar.date(byAdding: .weekOfYear, value: -offset, to: now),
+                  let startOfWeek = calendar.date(from: calendar.dateComponents([.yearForWeekOfYear, .weekOfYear], from: weekStart)) else {
+                continue
+            }
+            let endOfWeek = calendar.date(byAdding: .day, value: 7, to: startOfWeek)!
+            
+            let weekArtifacts = artifacts.filter { $0.date >= startOfWeek && $0.date < endOfWeek }
+            let seconds = weekArtifacts.compactMap { $0.totalDurationWorked }.reduce(0, +)
+            let hours = seconds / 3600.0
+            
+            let label = offset == 0 ? "This Wk" : "\(offset) wk\(offset == 1 ? "" : "s") ago"
+            list.append(WeeklyFocus(label: label, hours: hours))
+        }
+        return list
+    }
+    
+    struct CategoryShare: Identifiable {
+        let id = UUID()
+        let name: String
+        let percentage: Double
+    }
+    
+    private var topCategories: [CategoryShare] {
+        var counts: [String: Int] = [:]
+        let stopWords: Set<String> = ["the", "a", "an", "to", "for", "and", "in", "on", "my", "with", "at", "session", "focus", "work", "some", "of", "about", "me", "this", "that", "it"]
+        
+        for a in artifacts {
+            let words = a.goal.lowercased()
+                .components(separatedBy: CharacterSet.alphanumerics.inverted)
+                .filter { !$0.isEmpty && !stopWords.contains($0) && $0.count > 2 }
+            for w in words {
+                counts[w, default: 0] += 1
+            }
+        }
+        
+        let total = Double(counts.values.reduce(0, +))
+        guard total > 0 else { return [] }
+        
+        return counts.sorted { $0.value > $1.value }
+            .prefix(3)
+            .map { CategoryShare(name: $0.key.capitalized, percentage: (Double($0.value) / total) * 100) }
+    }
+    
+    private var recoveryBalanceMessage: String {
+        let totalSessions = artifacts.count
+        guard totalSessions > 0 else { return "Begin focusing to trace your recovery balance." }
+        
+        let healthySessions = artifacts.filter { $0.loopsCompleted >= 2 }.count
+        let percentage = Int((Double(healthySessions) / Double(totalSessions)) * 100)
+        
+        return "You maintained a sustainable pace in \(percentage)% of sessions (2+ loops), allowing your brain to rest."
+    }
+    
+    private var timeOfDayPeak: String {
+        let calendar = Calendar.current
+        var morningScores: [Double] = []
+        var afternoonScores: [Double] = []
+        var eveningScores: [Double] = []
+        
+        for a in artifacts {
+            let hour = calendar.component(.hour, from: a.date)
+            if hour >= 5 && hour < 12 {
+                morningScores.append(a.score)
+            } else if hour >= 12 && hour < 17 {
+                afternoonScores.append(a.score)
+            } else {
+                eveningScores.append(a.score)
+            }
+        }
+        
+        var peaks: [(String, Double)] = []
+        if !morningScores.isEmpty {
+            peaks.append(("Morning", morningScores.reduce(0, +) / Double(morningScores.count)))
+        }
+        if !afternoonScores.isEmpty {
+            peaks.append(("Afternoon", afternoonScores.reduce(0, +) / Double(afternoonScores.count)))
+        }
+        if !eveningScores.isEmpty {
+            peaks.append(("Evening / Night", eveningScores.reduce(0, +) / Double(eveningScores.count)))
+        }
+        
+        guard let best = peaks.max(by: { $0.1 < $1.1 }) else {
+            return "Start focusing at different times of day to find your natural peak."
+        }
+        
+        return String(format: "Your peak focus window is %@ with an average score of %.1f/5.0.", best.0, best.1)
+    }
+    
+    private var showedUpAnywayMessage: String {
+        let count = artifacts.filter { ($0.motivationLevel ?? 5) <= 2 }.count
+        if count == 0 {
+            return "You haven't logged sessions starting with low motivation yet."
+        }
+        return "You successfully started and focused \(count) times when motivation was low. Action creates motivation."
+    }
+    
+    private var qualityMessage: String {
+        guard !artifacts.isEmpty else { return "No data yet." }
+        let average = artifacts.map { $0.score }.reduce(0, +) / Double(artifacts.count)
+        return String(format: "Your average session quality is %.1f out of 5.0.", average)
+    }
+    
+    struct MotivationCorrelation: Identifiable {
+        let id = UUID()
+        let levelLabel: String
+        let averageScore: Double
+    }
+    
+    private var motivationCorrelations: [MotivationCorrelation] {
+        let levels = [
+            (1...2, "Low / Warmed Up"),
+            (3...3, "Steady"),
+            (4...5, "Locked In / All In")
+        ]
+        
+        return levels.map { range, label in
+            let filtered = artifacts.filter { range.contains($0.motivationLevel ?? 0) }
+            let average = filtered.isEmpty ? 0.0 : filtered.map { $0.score }.reduce(0, +) / Double(filtered.count)
+            return MotivationCorrelation(levelLabel: label, averageScore: average)
+        }
+    }
 }

@@ -5,13 +5,13 @@ struct SessionHistoryView: View {
     var settings: SettingsStore
     @Environment(\.dismiss) private var dismiss
 
-    private var artifacts: [SessionArtifact] { SessionStore.shared.loadAll() }
-    private var checkpoint: SessionStore.SessionCheckpoint? { SessionStore.shared.loadCheckpoint() }
+    @State private var localArtifacts: [SessionArtifact] = []
+    @State private var localCheckpoint: SessionStore.SessionCheckpoint?
 
     var body: some View {
         NavigationStack {
             Group {
-                if artifacts.isEmpty && checkpoint == nil {
+                if localArtifacts.isEmpty && localCheckpoint == nil {
                     emptyState
                 } else {
                     list
@@ -25,42 +25,68 @@ struct SessionHistoryView: View {
                         .foregroundStyle(Color.appForeground)
                 }
             }
+            .onAppear {
+                localArtifacts = SessionStore.shared.loadAll()
+                localCheckpoint = SessionStore.shared.loadCheckpoint()
+            }
         }
     }
 
     private var list: some View {
-        ScrollView {
-            LazyVStack(spacing: 0) {
-                if let cp = checkpoint {
-                    resumeCard(cp)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 20)
-                        .padding(.bottom, 8)
-                }
+        List {
+            if let cp = localCheckpoint {
+                resumeCard(cp)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 20)
+                    .padding(.bottom, 8)
+            }
 
-                if !artifacts.isEmpty {
+            if !localArtifacts.isEmpty {
+                Section {
+                    ForEach(Array(localArtifacts.enumerated()), id: \.element.id) { idx, artifact in
+                        VStack(alignment: .leading, spacing: 0) {
+                            artifactRow(artifact)
+                                .padding(.horizontal, 20)
+
+                            if idx < localArtifacts.count - 1 {
+                                Divider()
+                                    .padding(.leading, 20)
+                            }
+                        }
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                    }
+                    .onDelete(perform: deleteArtifacts)
+                } header: {
                     Text("Completed")
                         .font(.system(size: 11, weight: .medium))
                         .kerning(1.4)
                         .foregroundStyle(.tertiary)
                         .textCase(.uppercase)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.horizontal, 20)
-                        .padding(.top, checkpoint == nil ? 20 : 12)
+                        .padding(.leading, 20)
+                        .padding(.top, localCheckpoint == nil ? 20 : 12)
                         .padding(.bottom, 8)
-
-                    ForEach(Array(artifacts.enumerated()), id: \.element.id) { idx, artifact in
-                        artifactRow(artifact)
-                            .padding(.horizontal, 20)
-
-                        if idx < artifacts.count - 1 {
-                            Divider()
-                                .padding(.leading, 20)
-                        }
-                    }
                 }
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
             }
-            .padding(.bottom, 32)
+        }
+        .listStyle(.plain)
+        .background(Color.appBackground)
+    }
+
+    private func deleteArtifacts(at offsets: IndexSet) {
+        for index in offsets {
+            let artifact = localArtifacts[index]
+            SessionStore.shared.delete(artifact.id)
+        }
+        withAnimation {
+            localArtifacts.remove(atOffsets: offsets)
         }
     }
 

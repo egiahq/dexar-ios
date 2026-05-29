@@ -65,6 +65,11 @@ final class SessionStore {
         }
     }
 
+    func delete(_ id: String) {
+        let url = artifactsDir.appendingPathComponent("\(id).json")
+        try? fm.removeItem(at: url)
+    }
+
     func loadAll() -> [SessionArtifact] {
         let urls = (try? fm.contentsOfDirectory(at: artifactsDir, includingPropertiesForKeys: nil)) ?? []
         return urls.compactMap { url -> SessionArtifact? in

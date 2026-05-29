@@ -109,6 +109,7 @@ final class SessionEngine {
     private var needsStarterDecision: Bool = false
     private var wantsToRetryGoal: Bool = false
     private var wantsToGoBackToGoal: Bool = false
+    private var wantsToGoBackToMotivation: Bool = false
     private var wantsToStartNow: Bool = false
     private var startSessionContinuation: CheckedContinuation<Void, Never>?
     private var workStartPrompts: [String] { PromptStore.shared.presets(for: "work_start") }
@@ -142,7 +143,8 @@ final class SessionEngine {
     }
 
     func resumePendingSession() {
-        guard let checkpoint = pendingCheckpoint else { return }
+        let checkpoint = pendingCheckpoint ?? store.loadCheckpoint()
+        guard let checkpoint = checkpoint else { return }
         pendingCheckpoint = nil
         sessionTask?.cancel()
         sessionTask = Task { [weak self] in
@@ -371,6 +373,17 @@ final class SessionEngine {
         goalCaptureContinuation = nil
     }
 
+    func backToMotivation() {
+        wantsToGoBackToMotivation = true
+        recordingStopped = true
+        photoSkipped = true
+        timerSkipped = true
+        startSessionContinuation?.resume()
+        startSessionContinuation = nil
+        goalCaptureContinuation?.resume()
+        goalCaptureContinuation = nil
+    }
+
     func updateGoal(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         currentGoal = trimmed.isEmpty ? currentGoal : trimmed
@@ -478,18 +491,6 @@ final class SessionEngine {
         guard !Task.isCancelled else { return }
         sessionUserName = userName
 
-        withAnimation { phase = .motivationSelection }
-        let motivation = await waitForMotivation()
-        guard !Task.isCancelled else { return }
-        sessionMotivationLevel = motivation
-
-        withAnimation { phase = .preparingAudio }
-        let speechReady = await speech.ensureReady()
-        guard speechReady else {
-            withAnimation { phase = .error(PromptStore.shared.string(for: "error_models_unavailable")) }
-            return
-        }
-
         clearPhotosDirectory()
         progressPhotoLoops = []
         progressPhotos = [:]
@@ -501,21 +502,33 @@ final class SessionEngine {
         photoSkipped = false
         memoryRecallText = nil
         finalArtifact = nil
-        sessionMotivationLevel = motivation
         baselinePhoto = nil
         finalPhoto = nil
         comparisonText = ""
         spokenLine = ""
-        needsStarterDecision = motivation <= 2
-
-        if needsStarterDecision {
-            workDuration = 5 * 60
-        }
-
-        originalWorkDuration = workDuration
 
         var sessionConfirmed = false
         while !sessionConfirmed && !Task.isCancelled {
+            wantsToGoBackToMotivation = false
+
+            withAnimation { phase = .motivationSelection }
+            let motivation = await waitForMotivation()
+            guard !Task.isCancelled else { return }
+            sessionMotivationLevel = motivation
+
+            withAnimation { phase = .preparingAudio }
+            let speechReady = await speech.ensureReady()
+            guard speechReady else {
+                withAnimation { phase = .error(PromptStore.shared.string(for: "error_models_unavailable")) }
+                return
+            }
+
+            needsStarterDecision = motivation <= 2
+            if needsStarterDecision {
+                workDuration = 5 * 60
+            }
+            originalWorkDuration = workDuration
+
             wantsToGoBackToGoal = false
 
             var goalAccepted = false
@@ -535,6 +548,7 @@ final class SessionEngine {
                 }
                 guard !Task.isCancelled else { return }
 
+                if wantsToGoBackToMotivation { break }
                 if wantsToRetryGoal { continue }
 
                 currentGoal = transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Focus session" : transcript
@@ -542,6 +556,7 @@ final class SessionEngine {
                 goalAccepted = true
             }
 
+            if wantsToGoBackToMotivation { continue }
             guard !Task.isCancelled else { return }
 
             if !wantsToStartNow {
@@ -556,7 +571,7 @@ final class SessionEngine {
                 pendingPhoto = nil
                 photoSkipped = false
                 let deadline = Date().addingTimeInterval(15)
-                while !Task.isCancelled && !photoSkipped && !wantsToGoBackToGoal && Date() < deadline {
+                while !Task.isCancelled && !photoSkipped && !wantsToGoBackToGoal && !wantsToGoBackToMotivation && Date() < deadline {
                     if let photo = pendingPhoto {
                         baselinePhoto = photo
                         break
@@ -565,6 +580,7 @@ final class SessionEngine {
                 }
 
                 guard !Task.isCancelled else { return }
+                if wantsToGoBackToMotivation { continue }
                 if wantsToGoBackToGoal { continue }
             }
 
@@ -574,6 +590,7 @@ final class SessionEngine {
                 startSessionContinuation = cont
             }
             guard !Task.isCancelled else { return }
+            if wantsToGoBackToMotivation { continue }
             if wantsToGoBackToGoal { continue }
 
             sessionConfirmed = true
