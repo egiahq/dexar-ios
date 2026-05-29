@@ -40,6 +40,8 @@ final class SessionStore {
         var workDuration: TimeInterval
         var shortBreakDuration: TimeInterval
         var longBreakDuration: TimeInterval
+        var currentLoopDuration: TimeInterval?
+        var timerEndDate: Date?
         var savedAt: Date
     }
 

@@ -92,7 +92,7 @@ struct DexarWidgetLiveActivity: Widget {
                         .monospacedDigit()
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(context.state.isWork ? .orange : .cyan)
-                        .frame(maxWidth: 36)
+                        .frame(maxWidth: 48)
                 } minimal: {
                 Image(systemName: context.state.isWork ? "brain.head.profile" : "cup.and.saucer")
                     .foregroundStyle(context.state.isWork ? .orange : .cyan)

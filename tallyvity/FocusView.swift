@@ -1,4 +1,5 @@
 import SwiftUI
+import ActivityKit
 
 struct FocusView: View {
     var session: SessionEngine
@@ -68,8 +69,13 @@ struct FocusView: View {
         .task {
             session.loadPendingCheckpoint(userName: settings.userName)
             if let cp = SessionStore.shared.loadCheckpoint() {
-                checkpointToResume = cp
-                showResumeAlert = true
+                // If there's an active live activity, resume silently to maintain context
+                if !Activity<DexarAttributes>.activities.isEmpty {
+                    session.resumePendingSession()
+                } else {
+                    checkpointToResume = cp
+                    showResumeAlert = true
+                }
             }
         }
         .alert("Resume Session?", isPresented: $showResumeAlert, presenting: checkpointToResume) { cp in

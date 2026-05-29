@@ -102,6 +102,8 @@ final class SessionEngine {
     private(set) var currentLoopDuration: TimeInterval = 0
     private var haptic = UIImpactFeedbackGenerator(style: .light)
     private var liveActivity: Activity<DexarAttributes>?
+    private var timerEndDate: Date?
+    private let phaseEndNotificationIdentifier = "dexar.phase-end"
     private var sessionUserName: String = ""
     private var motivationContinuation: CheckedContinuation<Int, Never>?
     private var pendingMotivation: Int?
@@ -125,11 +127,17 @@ final class SessionEngine {
     init(speech: SpeechEngine, gemma: GemmaEngine) {
         self.speech = speech
         self.gemma = gemma
+        // Reconnect to existing live activity if one is running
+        self.liveActivity = Activity<DexarAttributes>.activities.first
+        if let activity = self.liveActivity {
+            self.timerEndDate = activity.content.state.endDate
+        }
     }
 
     // MARK: - Public API
 
     func startSession(userName: String) {
+        sessionUserName = userName
         sessionTask?.cancel()
         sessionTask = Task { [weak self] in
             await self?.runSession(userName: userName)
@@ -140,12 +148,14 @@ final class SessionEngine {
         guard let checkpoint = store.loadCheckpoint() else { return }
         guard checkpoint.userName == userName || checkpoint.userName.isEmpty || userName.isEmpty else { return }
         pendingCheckpoint = checkpoint
+        if sessionUserName.isEmpty { sessionUserName = checkpoint.userName }
     }
 
     func resumePendingSession() {
         let checkpoint = pendingCheckpoint ?? store.loadCheckpoint()
         guard let checkpoint = checkpoint else { return }
         pendingCheckpoint = nil
+        if sessionUserName.isEmpty { sessionUserName = checkpoint.userName }
         sessionTask?.cancel()
         sessionTask = Task { [weak self] in
             await self?.resumeSession(from: checkpoint)
@@ -158,6 +168,9 @@ final class SessionEngine {
     }
 
     func cancelSession() {
+        // Capture any final elapsed time before zeroing out
+        let finalElapsed = timerElapsed
+        
         sessionTask?.cancel()
         sessionTask = nil
         timerTask?.cancel()
@@ -171,6 +184,10 @@ final class SessionEngine {
             motivationContinuation.resume(returning: 3)
         }
         pendingMotivation = nil
+        
+        // If we were in a work phase, we should ideally record the progress, 
+        // but cancelSession is currently destructive. 
+        // For now, we just ensure we don't leak background tasks.
 
         // Reset per-session transient state so a new start cannot reuse stale values.
         currentLoopAnswers = []
@@ -192,8 +209,12 @@ final class SessionEngine {
         pendingRoundEndChoice = nil
 
         endLiveActivity()
+        cancelPhaseEndNotification()
         updateScreenAwake(enabled: false)
         store.clearCheckpoint()
+        timerEndDate = nil
+        sessionUserName = ""
+        timerElapsed = 0
     }
 
     func forceEndSession() {
@@ -234,6 +255,7 @@ final class SessionEngine {
         }
 
         endLiveActivity()
+        cancelPhaseEndNotification()
         updateScreenAwake(enabled: false)
         store.clearCheckpoint()
 
@@ -463,6 +485,10 @@ final class SessionEngine {
     // MARK: - Timer display helpers
 
     var remainingTime: TimeInterval {
+        if isActiveTimerPhase, let timerEndDate {
+            return max(0, timerEndDate.timeIntervalSinceNow)
+        }
+
         let total: TimeInterval
         switch phase {
         case .workActive, .backgroundPrep:
@@ -473,6 +499,13 @@ final class SessionEngine {
             total = workDuration
         }
         return max(0, total - timerElapsed)
+    }
+
+    private var isActiveTimerPhase: Bool {
+        if case .workActive = phase { return true }
+        if case .backgroundPrep = phase { return true }
+        if case .breakTime = phase { return true }
+        return false
     }
 
     var isWorkPhase: Bool {
@@ -616,9 +649,13 @@ final class SessionEngine {
         }
         updateScreenAwake(enabled: true)
         withAnimation { phase = .workActive(loopNumber: currentLoopNumber) }
+        
+        let workEndDate = Date().addingTimeInterval(workDuration)
+        timerEndDate = workEndDate
         persistCheckpoint()
-        startLiveActivity(duration: workDuration, isWork: true, loopNumber: currentLoopNumber)
-        let timerResult = await runTimer(duration: workDuration)
+        
+        startLiveActivity(duration: workDuration, isWork: true, loopNumber: currentLoopNumber, endDate: workEndDate)
+        let timerResult = await runTimer(duration: workDuration, totalDuration: workDuration, endDate: workEndDate)
         currentLoopDuration += timerElapsed
         endLiveActivity()
         guard !Task.isCancelled else { updateScreenAwake(enabled: false); return .finish }
@@ -648,6 +685,7 @@ final class SessionEngine {
         guard !Task.isCancelled else { return .finish }
 
         withAnimation { phase = .roundEnd }
+        timerEndDate = nil // No active timer during round end
         persistCheckpoint()
 
         let choice: RoundEndChoice
@@ -693,6 +731,7 @@ final class SessionEngine {
             ))
 
             if !isLong { currentLoopNumber += 1 }
+            timerEndDate = nil
             persistCheckpoint()
             return .continueNext
         }
@@ -709,10 +748,14 @@ final class SessionEngine {
         }
 
         withAnimation { phase = .breakTime(loopNumber: currentLoopNumber) }
+        
+        let breakEndDate = Date().addingTimeInterval(duration)
+        timerEndDate = breakEndDate
         persistCheckpoint()
+        
         sayFixedNonBlocking(cue: "break_recovery_prompt", fallback: breakRecoveryPresets.randomElement() ?? "")
-        startLiveActivity(duration: duration, isWork: false, loopNumber: currentLoopNumber)
-        await runTimer(duration: duration)
+        startLiveActivity(duration: duration, isWork: false, loopNumber: currentLoopNumber, endDate: breakEndDate)
+        await runTimer(duration: duration, totalDuration: duration, endDate: breakEndDate)
         endLiveActivity()
         guard !Task.isCancelled else { return .finish }
 
@@ -722,6 +765,7 @@ final class SessionEngine {
 
         // Transition screen before next loop
         withAnimation { phase = .nextSessionCountdown(loopNumber: currentLoopNumber) }
+        timerEndDate = nil
         persistCheckpoint()
         await sayFixed(cue: "next_session_prompt", fallback: selectVoiceLine(
             cue: "next_session",
@@ -736,6 +780,7 @@ final class SessionEngine {
 
     private func finishSession(finalAnswers: [String] = []) async {
         guard !Task.isCancelled else { return }
+        endLiveActivity()
         withAnimation { phase = .storing }
 
         let names = sessionUserName.isEmpty ? "there" : sessionUserName
@@ -827,27 +872,33 @@ final class SessionEngine {
 
     // MARK: - Timer
 
-    private func runTimer(duration: TimeInterval) async -> TimerResult {
+    private func runTimer(
+        duration: TimeInterval,
+        totalDuration: TimeInterval? = nil,
+        endDate: Date? = nil
+    ) async -> TimerResult {
         guard duration > 0, !Task.isCancelled else { return .cancelled }
 
-        timerElapsed = 0
-        timerProgress = 0
-        timerSkipped = false
+        let resolvedEndDate = endDate ?? Date().addingTimeInterval(duration)
+        let resolvedTotalDuration = max(totalDuration ?? duration, duration)
 
-        let clock = ContinuousClock()
-        let start = clock.now
+        timerSkipped = false
+        timerEndDate = resolvedEndDate
+        timerElapsed = min(max(0, resolvedTotalDuration - max(0, resolvedEndDate.timeIntervalSinceNow)), resolvedTotalDuration)
+        timerProgress = min(timerElapsed / resolvedTotalDuration, 1.0)
+        persistCheckpoint()
 
         while true {
-            guard !Task.isCancelled else { return .cancelled }  // cancel → do NOT set progress = 1
-            guard !timerSkipped else { break }       // skip  → fall through to set progress = 1
+            guard !Task.isCancelled else { return .cancelled }
+            guard !timerSkipped else { break }
 
-            let d = clock.now - start
-            let elapsed = Double(d.components.seconds) + Double(d.components.attoseconds) * 1e-18
-            timerElapsed = min(elapsed, duration)
-            timerProgress = min(elapsed / duration, 1.0)
+            let remaining = max(0, resolvedEndDate.timeIntervalSinceNow)
+            let elapsed = min(max(0, resolvedTotalDuration - remaining), resolvedTotalDuration)
+            timerElapsed = elapsed
+            timerProgress = min(elapsed / resolvedTotalDuration, 1.0)
 
-            // 5-min haptics (only meaningful for work timers ≥ 5 min)
-            if duration >= 300 {
+            // 5-min haptics
+            if resolvedTotalDuration >= 300 {
                 let prevElapsed = max(0, elapsed - 0.15)
                 if Int(elapsed / 300) > Int(prevElapsed / 300) && elapsed > 1 {
                     haptic.impactOccurred(intensity: 0.25)
@@ -859,14 +910,16 @@ final class SessionEngine {
             do {
                 try await Task.sleep(for: .milliseconds(150))
             } catch {
-                return .cancelled  // CancellationError → hard exit, do NOT complete timer
+                return .cancelled
             }
         }
 
-        // Only reached on natural finish or skip — not on cancel
         let skipped = timerSkipped
         timerProgress = 1.0
-        timerElapsed = duration
+        if skipped {
+            cancelPhaseEndNotification()
+        }
+        timerEndDate = nil // Only clear on natural finish or skip
         return skipped ? .skipped : .completed
     }
 
@@ -982,13 +1035,18 @@ final class SessionEngine {
         let work = workDuration
         let short = shortBreakDuration
         let long = longBreakDuration
+        
+        let phaseTag = phaseCheckpointTag(phase)
+        let loopDur = phaseTag == "work" ? (currentLoopDuration + timerElapsed) : currentLoopDuration
+        
         let currentPhase = phase
-
-        let phaseTag = phaseCheckpointTag(currentPhase)
+        let tEndDate = timerEndDate
+        
+        let uName = userName.isEmpty ? sessionUserName : userName
 
         Task.detached(priority: .background) {
             SessionStore.shared.saveCheckpoint(.init(
-                userName: userName,
+                userName: uName,
                 phaseRaw: phaseTag,
                 currentGoal: goal,
                 completedLoops: currentLoops,
@@ -999,6 +1057,8 @@ final class SessionEngine {
                 workDuration: work,
                 shortBreakDuration: short,
                 longBreakDuration: long,
+                currentLoopDuration: loopDur,
+                timerEndDate: tEndDate,
                 savedAt: Date()
             ))
         }
@@ -1043,7 +1103,7 @@ final class SessionEngine {
         completedLoops = checkpoint.completedLoops
         currentLoopAnswers = checkpoint.currentLoopAnswers
         currentLoopNumber = max(1, checkpoint.currentLoopNumber)
-        currentLoopDuration = 0
+        currentLoopDuration = checkpoint.currentLoopDuration ?? 0
         currentGoal = checkpoint.currentGoal
         sessionMotivationLevel = checkpoint.motivationLevel
         totalLoops = min(6, max(1, checkpoint.totalLoops ?? 4))
@@ -1051,6 +1111,46 @@ final class SessionEngine {
         shortBreakDuration = checkpoint.shortBreakDuration
         longBreakDuration = checkpoint.longBreakDuration
         originalWorkDuration = checkpoint.workDuration
+        needsStarterDecision = (sessionMotivationLevel ?? 5) <= 2
+
+        // Restore timer state: Live Activity is the absolute source of truth if available
+        var remainingTime: TimeInterval? = nil
+        var resumeIsWork = checkpoint.phaseRaw != "break"
+        
+        // Retry loop for activity detection (sometimes takes a moment on cold start)
+        var activityFound = false
+        for _ in 0..<3 {
+            if let activity = Activity<DexarAttributes>.activities.first {
+                self.liveActivity = activity
+                let activityEndDate = activity.content.state.endDate
+                let activityIsWork = activity.content.state.isWork
+                let activityLoop = activity.content.state.loopNumber
+                
+                let now = Date()
+                if activityEndDate > now {
+                    remainingTime = activityEndDate.timeIntervalSince(now)
+                } else {
+                    remainingTime = 0.1
+                }
+                
+                resumeIsWork = activityIsWork
+                currentLoopNumber = activityLoop
+                self.timerEndDate = activityEndDate
+                activityFound = true
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+
+        if !activityFound, let endDate = checkpoint.timerEndDate {
+            let now = Date()
+            if endDate > now {
+                remainingTime = endDate.timeIntervalSince(now)
+            } else {
+                remainingTime = 0.1
+            }
+            self.timerEndDate = endDate
+        }
 
         baselinePhoto = loadPhotoFromDisk(name: "baseline_photo.jpg")
         finalPhoto = loadPhotoFromDisk(name: "final_photo.jpg")
@@ -1076,18 +1176,72 @@ final class SessionEngine {
         }
         guard !Task.isCancelled else { return }
 
-        if checkpoint.phaseRaw == "break" {
-            let breakResult = await runBreak()
-            if breakResult == .continueNext {
-                await mainLoop()
+        if !resumeIsWork {
+            if let remaining = remainingTime {
+                let endDate = timerEndDate ?? checkpoint.timerEndDate ?? Date().addingTimeInterval(remaining)
+                let totalDuration = completedLoops.count >= totalLoops ? longBreakDuration : shortBreakDuration
+                withAnimation { phase = .breakTime(loopNumber: currentLoopNumber) }
+                timerEndDate = endDate
+                startLiveActivity(duration: remaining, isWork: false, loopNumber: currentLoopNumber, endDate: endDate)
+                await runTimer(duration: remaining, totalDuration: totalDuration, endDate: endDate)
+                endLiveActivity()
+                guard !Task.isCancelled else { return }
+                
+                let isLong = completedLoops.count >= totalLoops
+                if isLong {
+                    await capturePhotoDelta()
+                    await finishSession()
+                } else {
+                    await mainLoop()
+                }
             } else {
-                guard !Task.isCancelled else { return }
-                await capturePhotoDelta()
-                guard !Task.isCancelled else { return }
-                await finishSession()
+                let breakResult = await runBreak()
+                if breakResult == .continueNext {
+                    await mainLoop()
+                } else {
+                    guard !Task.isCancelled else { return }
+                    await capturePhotoDelta()
+                    guard !Task.isCancelled else { return }
+                    await finishSession()
+                }
             }
         } else {
-            await mainLoop()
+            if let remaining = remainingTime {
+                // Resume active work timer
+                let endDate = timerEndDate ?? checkpoint.timerEndDate ?? Date().addingTimeInterval(remaining)
+                withAnimation { phase = .workActive(loopNumber: currentLoopNumber) }
+                updateScreenAwake(enabled: true)
+                timerEndDate = endDate
+                startLiveActivity(duration: remaining, isWork: true, loopNumber: currentLoopNumber, endDate: endDate)
+                let timerResult = await runTimer(duration: remaining, totalDuration: workDuration, endDate: endDate)
+                currentLoopDuration += timerElapsed
+                endLiveActivity()
+                updateScreenAwake(enabled: false)
+                guard !Task.isCancelled && timerResult != .cancelled else { return }
+                
+                withAnimation { phase = .roundEnd }
+                if timerResult == .completed || timerResult == .skipped {
+                    speech.playCue(named: "end")
+                }
+                
+                let choice = await runRoundEnd()
+                if choice == .finish {
+                    await capturePhotoDelta()
+                    await finishSession()
+                } else if choice == .workAgain {
+                    await mainLoop()
+                } else {
+                    let breakAction = await runBreak()
+                    if breakAction == .continueNext {
+                        await mainLoop()
+                    } else {
+                        await capturePhotoDelta()
+                        await finishSession()
+                    }
+                }
+            } else {
+                await mainLoop()
+            }
         }
     }
 
@@ -1105,23 +1259,34 @@ final class SessionEngine {
 
     // MARK: - Live Activity
 
-    private func startLiveActivity(duration: TimeInterval, isWork: Bool, loopNumber: Int) {
+    private func startLiveActivity(duration: TimeInterval, isWork: Bool, loopNumber: Int, endDate: Date? = nil) {
+        let resolvedEndDate = endDate ?? timerEndDate ?? Date().addingTimeInterval(duration)
+        timerEndDate = resolvedEndDate
+        schedulePhaseEndNotification(endDate: resolvedEndDate, isWork: isWork, loopNumber: loopNumber)
+
         let info = ActivityAuthorizationInfo()
-        print("[LiveActivity] areActivitiesEnabled=\(info.areActivitiesEnabled) frequentUpdatesEnabled=\(info.frequentPushesEnabled)")
-        guard info.areActivitiesEnabled else {
-            print("[LiveActivity] blocked — user may have disabled in Settings > [App] > Live Activities")
-            return
-        }
-        endLiveActivity()
-        let attributes = DexarAttributes(goal: currentGoal, shortGoal: shortGoal, totalLoops: totalLoops)
+        guard info.areActivitiesEnabled else { return }
+        
         let state = DexarAttributes.ContentState(
-            endDate: Date().addingTimeInterval(duration),
+            endDate: resolvedEndDate,
             isWork: isWork,
             loopNumber: loopNumber
         )
+        
+        if let activity = liveActivity {
+            let content = ActivityContent(
+                state: state,
+                staleDate: resolvedEndDate.addingTimeInterval(60),
+                relevanceScore: 100
+            )
+            Task { await activity.update(content) }
+            return
+        }
+        
+        let attributes = DexarAttributes(goal: currentGoal, shortGoal: shortGoal, totalLoops: totalLoops)
         let content = ActivityContent(
             state: state,
-            staleDate: Date().addingTimeInterval(duration + 60),
+            staleDate: resolvedEndDate.addingTimeInterval(60),
             relevanceScore: 100
         )
         do {
@@ -1130,7 +1295,6 @@ final class SessionEngine {
                 content: content,
                 pushType: nil
             )
-            print("[LiveActivity] started id=\(liveActivity?.id ?? "nil") state=\(String(describing: liveActivity?.activityState))")
         } catch {
             print("[LiveActivity] request failed: \(error)")
         }
@@ -1138,12 +1302,72 @@ final class SessionEngine {
 
     private func updateLiveActivity(remainingDuration: TimeInterval, isWork: Bool, loopNumber: Int) {
         guard let activity = liveActivity else { return }
+        let resolvedEndDate = Date().addingTimeInterval(remainingDuration)
+        timerEndDate = resolvedEndDate
+        schedulePhaseEndNotification(endDate: resolvedEndDate, isWork: isWork, loopNumber: loopNumber)
         let state = DexarAttributes.ContentState(
-            endDate: Date().addingTimeInterval(remainingDuration),
+            endDate: resolvedEndDate,
             isWork: isWork,
             loopNumber: loopNumber
         )
-        Task { await activity.update(.init(state: state, staleDate: Date().addingTimeInterval(remainingDuration + 60))) }
+        Task { await activity.update(.init(state: state, staleDate: resolvedEndDate.addingTimeInterval(60))) }
+    }
+
+    private func schedulePhaseEndNotification(endDate: Date, isWork: Bool, loopNumber: Int) {
+        let interval = max(1, endDate.timeIntervalSinceNow)
+        let goal = currentGoal
+        let title = isWork ? "Focus phase over" : "Break over"
+        let body = isWork
+            ? "Loop \(loopNumber) is done. Open Dexar to wrap it up."
+            : "Break is done. Open Dexar for the next loop."
+
+        Task {
+            let center = UNUserNotificationCenter.current()
+            center.removePendingNotificationRequests(withIdentifiers: [phaseEndNotificationIdentifier])
+
+            let settings = await center.notificationSettings()
+            if settings.authorizationStatus == .notDetermined {
+                var options: UNAuthorizationOptions = [.alert, .sound]
+                if #available(iOS 15.0, *) {
+                    options.insert(.timeSensitive)
+                }
+                _ = try? await center.requestAuthorization(options: options)
+            }
+
+            let updatedSettings = await center.notificationSettings()
+            guard updatedSettings.authorizationStatus == .authorized ||
+                    updatedSettings.authorizationStatus == .provisional ||
+                    updatedSettings.authorizationStatus == .ephemeral else {
+                return
+            }
+
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            content.sound = .default
+            content.userInfo = [
+                "phase": isWork ? "work" : "break",
+                "loopNumber": loopNumber,
+                "goal": goal
+            ]
+            if #available(iOS 15.0, *) {
+                content.interruptionLevel = .timeSensitive
+            }
+
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: interval, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: phaseEndNotificationIdentifier,
+                content: content,
+                trigger: trigger
+            )
+            try? await center.add(request)
+        }
+    }
+
+    private func cancelPhaseEndNotification() {
+        UNUserNotificationCenter.current().removePendingNotificationRequests(
+            withIdentifiers: [phaseEndNotificationIdentifier]
+        )
     }
 
     private func endLiveActivity() {
