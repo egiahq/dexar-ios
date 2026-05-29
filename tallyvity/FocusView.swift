@@ -196,6 +196,7 @@ struct FocusView: View {
 
                     activityGraph
                 }
+                .padding(.horizontal, 28)
 
                 timePickers
 
@@ -749,19 +750,23 @@ struct FocusView: View {
         let days = past30Days
         let allArtifacts = SessionStore.shared.loadAll()
         
-        return HStack(spacing: 4) {
-            ForEach(0..<6, id: \.self) { col in
-                VStack(spacing: 4) {
-                    ForEach(0..<5, id: \.self) { row in
-                        let index = col * 5 + row
+        return HStack(spacing: 0) {
+            ForEach(0..<10, id: \.self) { col in
+                VStack(spacing: 6) {
+                    ForEach(0..<3, id: \.self) { row in
+                        let index = col * 3 + row
                         if index < days.count {
                             let date = days[index]
                             let duration = workDuration(forDate: date, artifacts: allArtifacts)
-                            RoundedRectangle(cornerRadius: 2.5)
+                            RoundedRectangle(cornerRadius: 3)
                                 .fill(cellColor(for: duration))
-                                .frame(width: 12, height: 12)
+                                .frame(maxWidth: .infinity)
+                                .aspectRatio(1, contentMode: .fit)
                         }
                     }
+                }
+                if col < 9 {
+                    Spacer(minLength: 6)
                 }
             }
         }
