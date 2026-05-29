@@ -80,6 +80,7 @@ final class SessionEngine {
     private(set) var baselinePhoto: UIImage? = nil
     private(set) var finalPhoto: UIImage? = nil
     private(set) var comparisonText: String = ""
+    private(set) var progressPhotoLoops: Set<Int> = []
 
     private let speech: SpeechEngine
     private let gemma: GemmaEngine
@@ -96,7 +97,7 @@ final class SessionEngine {
     private var pendingPhoto: UIImage? = nil
     private var photoSkipped = false
     private var timerSkipped = false
-    private var currentLoopNumber: Int = 0
+    private(set) var currentLoopNumber: Int = 0
     private var haptic = UIImpactFeedbackGenerator(style: .light)
     private var liveActivity: Activity<TallyvityAttributes>?
     private var sessionUserName: String = ""
@@ -202,6 +203,41 @@ final class SessionEngine {
 
     func setBaselinePhoto(_ image: UIImage) {
         pendingPhoto = image
+        savePhotoToDisk(image, name: "baseline_photo.jpg")
+    }
+
+    func setProgressPhoto(_ image: UIImage) {
+        let loop = currentLoopNumber
+        progressPhotoLoops.insert(loop)
+        savePhotoToDisk(image, name: "progress_photo_\(loop).jpg")
+        finalPhoto = image
+        savePhotoToDisk(image, name: "final_photo.jpg")
+    }
+
+    func savePhotoToDisk(_ image: UIImage, name: String) {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("photos", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let fileURL = dir.appendingPathComponent(name)
+        if let data = image.jpegData(compressionQuality: 0.8) {
+            try? data.write(to: fileURL)
+        }
+    }
+
+    func loadPhotoFromDisk(name: String) -> UIImage? {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("photos", isDirectory: true)
+        let fileURL = dir.appendingPathComponent(name)
+        if let data = try? Data(contentsOf: fileURL) {
+            return UIImage(data: data)
+        }
+        return nil
+    }
+
+    func clearPhotosDirectory() {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("photos", isDirectory: true)
+        try? FileManager.default.removeItem(at: dir)
     }
 
     func skipPhoto() {
@@ -383,6 +419,8 @@ final class SessionEngine {
             return
         }
 
+        clearPhotosDirectory()
+        progressPhotoLoops = []
         completedLoops = []
         currentGoal = ""
         currentLoopNumber = 1
@@ -914,6 +952,18 @@ final class SessionEngine {
         shortBreakDuration = checkpoint.shortBreakDuration
         longBreakDuration = checkpoint.longBreakDuration
         originalWorkDuration = checkpoint.workDuration
+
+        baselinePhoto = loadPhotoFromDisk(name: "baseline_photo.jpg")
+        finalPhoto = loadPhotoFromDisk(name: "final_photo.jpg")
+        progressPhotoLoops = []
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("photos", isDirectory: true)
+        for i in 1...totalLoops {
+            let fileURL = dir.appendingPathComponent("progress_photo_\(i).jpg")
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                progressPhotoLoops.insert(i)
+            }
+        }
 
         withAnimation { phase = .preparingAudio }
         let speechReady = await speech.ensureReady()

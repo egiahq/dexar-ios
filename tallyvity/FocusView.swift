@@ -30,7 +30,11 @@ struct FocusView: View {
         }
         .sheet(isPresented: $showCamera) {
             CameraPickerView { image in
-                session.setBaselinePhoto(image)
+                if session.phase == .roundEnd {
+                    session.setProgressPhoto(image)
+                } else {
+                    session.setBaselinePhoto(image)
+                }
                 showCamera = false
             }
             .ignoresSafeArea()
@@ -624,6 +628,22 @@ struct FocusView: View {
             Spacer()
 
             VStack(spacing: 16) {
+                let hasPhoto = session.progressPhotoLoops.contains(session.currentLoopNumber)
+                Button(action: {
+                    showCamera = true
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: hasPhoto ? "checkmark.circle.fill" : "camera")
+                        Text(hasPhoto ? "Photo captured" : "Take progress photo")
+                    }
+                    .font(.headline.weight(.medium))
+                    .foregroundStyle(hasPhoto ? .green : .primary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+
                 Button(action: {
                     session.selectRoundEndAction(.workFiveMore)
                 }) {

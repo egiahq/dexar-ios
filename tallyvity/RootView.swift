@@ -56,7 +56,7 @@ struct RootView: View {
 
     private var bootView: some View {
         VStack(spacing: 24) {
-            Text("Tallyvity")
+            Text("Dexar")
                 .font(.system(size: 28, weight: .light, design: .rounded))
                 .foregroundStyle(.primary)
 
