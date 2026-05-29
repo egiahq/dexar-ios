@@ -62,7 +62,6 @@ flowchart TD
         GemmaEngine{GemmaEngine}:::inference
         
         WhisperKit[/WhisperKit STT/]:::inference
-        TTSKit[/TTSKit Speech Synthesis/]:::inference
         MLXGemma[/MLX Gemma 4 VLM/]:::inference
     end
 
@@ -87,7 +86,6 @@ flowchart TD
     
     %% Engine to SDK relationships %%
     SpeechEngine --> WhisperKit
-    SpeechEngine --> TTSKit
     SpeechEngine --> AVFoundation
     GemmaEngine --> MLXGemma
     
@@ -161,7 +159,7 @@ The SwiftUI Presentation Layer manages user interactions through clean, minimali
 `SessionEngine` serves as the central state machine. It manages transitions between work, break, self-scoring, and recording phases. To ensure resilience against unexpected app terminations, `SessionEngine` writes serialization checkpoints to `active_session_checkpoint.json`. `SessionStore` handles the persistent recording of completed sessions inside an artifacts directory, and it provides search utilities for previous accomplishments. `PromptStore` loads a structured JSON file at boot, caching dynamic voice cues, localization settings, and default UI labels.
 
 ### On-Device Machine Learning Suite
-Local inference forms the foundation of Dexar. `SpeechEngine` controls WhisperKit to transcribe spoken goals or question responses. It configures the AVAudioSession for simultaneous recording and playback, receiving mono audio streams at 16 kHz to match Whisper's native expectations. The engine also drives `TTSKit` to synthesize responses using custom speech profiles. `GemmaEngine` loads the Gemma 4 vision-language model using Apple MLX to read context-aware prompts. During work phases, Gemma compiles session data in the background to output comparative descriptions of workspace changes and compile final session artifacts.
+Local inference forms the foundation of Dexar. `SpeechEngine` controls WhisperKit to transcribe spoken goals or question responses. It configures the AVAudioSession for recording, receiving mono audio streams at 16 kHz to match Whisper's native expectations. `GemmaEngine` loads the Gemma 4 vision-language model using Apple MLX to read context-aware prompts. During work phases, Gemma compiles session data in the background to output comparative descriptions of workspace changes and compile final session artifacts.
 
 ### Apple Native Integrations
 `AVFoundation` is used to capture photos at baseline and round-end, and to handle real-time metering for silence detection. `ActivityKit` manages the lifecycle of lock screen widgets and Dynamic Island displays, ensuring that live session timers survive background suspension. `WidgetKit` acts as the rendering boundary, drawing updates from `DexarAttributes` and maintaining the monospaced timer presentation on system bezels.
@@ -184,7 +182,42 @@ If a user indicates low starting motivation, defined as a score of two or lower,
 ## Core System Operations
 
 ### Audio Recording and Speech Processing
-`AVAudioRecorder` receives incoming audio at a 16 kHz sample rate. While recording, `SpeechEngine` samples average power levels via hardware-level metering. If the linear loudness level remains below a calibrated floor of 0.04 for more than 2.5 seconds, the engine triggers an automatic stop. This auto-stop mechanism prevents the system from capturing long silences or ambient noise, ensuring higher transcription accuracy when passing the audio payload to WhisperKit. `TTSKit` then consumes textual responses frame-by-frame, streaming audio directly to the speaker with minimal buffering.
+`AVAudioRecorder` receives incoming audio at a 16 kHz sample rate. While recording, `SpeechEngine` samples average power levels via hardware-level metering. If the linear loudness level remains below a calibrated floor of 0.04 for more than 2.5 seconds, the engine triggers an automatic stop. This auto-stop mechanism prevents the system from capturing long silences or ambient noise, ensuring higher transcription accuracy when passing the audio payload to WhisperKit.
 
 ### Semantic Memory Retrieval
 When a user declares a new focus goal, Dexar uses a custom retrieval pipeline in `SessionStore` to search past history. Instead of relying on exact word matches, the store decomposes the current goal and past goals into character trigrams. It then calculates the cosine similarity between these frequency vectors. If a past session yields a similarity score above 0.18, Gemma is given the matching historical data to generate a memory recall prompt, reminding the user of prior blockers or next steps at the start of their new session.
+
+---
+
+## Project Structure
+
+- **`dexar/`**: Contains the main iOS application target. This includes views like `FocusView` and `RootView`, state orchestrators like `SessionEngine`, storage pipelines like `SessionStore`, and on-device machine learning managers like `SpeechEngine` and `GemmaEngine`.
+- **`DexarWidget/`**: Contains the lock screen widget extension, Dynamic Island presentation configurations, and the WidgetBundle entry point.
+- **`voice_prompt_generator/`**: A Python-based developer utility. It includes `worker.py` and `main.py` to compile voice cues using custom speech embeddings, saving compressed M4A assets for inclusion in the app bundle.
+- **`docs/`**: Houses technical guides for model integration, Whisper configurations, and Silero VAD compilation steps.
+- **`specs/`**: Contains engineering spec files and master implementation trackers mapping the progress of system checkpoints.
+- **`audio_production/`**: Contains Ableton Live session templates used to master fixed audio cue assets.
+
+---
+
+## Tech Stack
+
+- **User Interface:** SwiftUI
+- **Audio & Transcription:** AVAudioFoundation, WhisperKit
+- **On-Device Inference:** MLX Swift, CoreML (Gemma VLM, WhisperKit)
+- **Persistence:** Local file system storage (JSON Flat-files)
+- **Live Activities:** ActivityKit, WidgetKit
+
+---
+
+## Developer Setup
+
+Building Dexar requires macOS 14.0 or later, Xcode 16.0 or later, and a device or simulator running iOS 18.0 or later. 
+
+1. Open `dexar.xcodeproj` in Xcode.
+2. The project resolves native Swift package manager dependencies, including Apple MLX, Swift Transformers, HuggingFace, and the Argmax open-source SDK.
+3. On first run, the app performs a one-time download of approximately 600 MB of cached files to initialize the WhisperKit models. 
+4. The 3.6 GB Gemma 4 vision-language model can be downloaded separately using the Diagnostics section in the app settings panel.
+5. Grant microphone and camera permissions on launch.
+6. Run-time diagnostics can be tested using the built-in LLM chat and voice loop views in the settings menu.
+
