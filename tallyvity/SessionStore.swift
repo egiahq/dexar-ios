@@ -5,6 +5,7 @@ struct LoopRecord: Codable {
     var answers: [String]
     var score: Int
     var scoreReason: String
+    var duration: TimeInterval?
 }
 
 struct SessionArtifact: Codable, Identifiable {
@@ -18,6 +19,8 @@ struct SessionArtifact: Codable, Identifiable {
     var loopsCompleted: Int
     var closingSentence: String
     var finalAnswers: [String]
+    var totalDurationWorked: TimeInterval?
+    var loopDurations: [TimeInterval]?
 }
 
 final class SessionStore {

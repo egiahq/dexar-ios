@@ -79,6 +79,7 @@ final class SessionEngine {
     private(set) var spokenLine: String = ""
     private(set) var baselinePhoto: UIImage? = nil
     private(set) var finalPhoto: UIImage? = nil
+    private(set) var progressPhotos: [Int: UIImage] = [:]
     private(set) var comparisonText: String = ""
     private(set) var progressPhotoLoops: Set<Int> = []
 
@@ -98,8 +99,9 @@ final class SessionEngine {
     private var photoSkipped = false
     private var timerSkipped = false
     private(set) var currentLoopNumber: Int = 0
+    private(set) var currentLoopDuration: TimeInterval = 0
     private var haptic = UIImpactFeedbackGenerator(style: .light)
-    private var liveActivity: Activity<TallyvityAttributes>?
+    private var liveActivity: Activity<DexarAttributes>?
     private var sessionUserName: String = ""
     private var motivationContinuation: CheckedContinuation<Int, Never>?
     private var pendingMotivation: Int?
@@ -190,7 +192,74 @@ final class SessionEngine {
         endLiveActivity()
         updateScreenAwake(enabled: false)
         store.clearCheckpoint()
-        withAnimation { phase = .idle }
+    }
+
+    func forceEndSession() {
+        timerTask?.cancel()
+        timerTask = nil
+        sessionTask?.cancel()
+        sessionTask = nil
+        speech.stopAll()
+        recordingStopped = true
+        isRecording = false
+
+        if let motivationContinuation {
+            self.motivationContinuation = nil
+            motivationContinuation.resume(returning: 3)
+        }
+        pendingMotivation = nil
+
+        startSessionContinuation?.resume()
+        startSessionContinuation = nil
+        goalCaptureContinuation?.resume()
+        goalCaptureContinuation = nil
+        roundEndContinuation?.resume(returning: .startBreak)
+        roundEndContinuation = nil
+        pendingRoundEndChoice = nil
+
+        if isWorkPhase && timerElapsed > 0 {
+            currentLoopDuration += timerElapsed
+        }
+        if currentLoopDuration > 0 {
+            completedLoops.append(LoopRecord(
+                goalText: currentGoal,
+                answers: [],
+                score: 0,
+                scoreReason: "",
+                duration: currentLoopDuration
+            ))
+            currentLoopDuration = 0
+        }
+
+        endLiveActivity()
+        updateScreenAwake(enabled: false)
+        store.clearCheckpoint()
+
+        let totalDuration = completedLoops.reduce(0.0) { $0 + ($1.duration ?? 0.0) }
+        let loopDurations = completedLoops.map { $0.duration ?? 0.0 }
+        let goalText = currentGoal.isEmpty ? "Focus session" : currentGoal
+
+        let artifact = SessionArtifact(
+            id: UUID().uuidString,
+            date: Date(),
+            goal: goalText,
+            motivationLevel: sessionMotivationLevel,
+            score: completedLoops.isEmpty ? 0 : Double(completedLoops.map(\.score).reduce(0, +)) / Double(completedLoops.count),
+            blocker: "",
+            intentNext: "",
+            loopsCompleted: completedLoops.count,
+            closingSentence: "Session ended early.",
+            finalAnswers: [],
+            totalDurationWorked: totalDuration,
+            loopDurations: loopDurations
+        )
+
+        store.save(artifact)
+
+        withAnimation {
+            self.finalArtifact = artifact
+            self.phase = .sessionReport
+        }
     }
 
     func stopListening() {
@@ -209,6 +278,7 @@ final class SessionEngine {
     func setProgressPhoto(_ image: UIImage) {
         let loop = currentLoopNumber
         progressPhotoLoops.insert(loop)
+        progressPhotos[loop] = image
         savePhotoToDisk(image, name: "progress_photo_\(loop).jpg")
         finalPhoto = image
         savePhotoToDisk(image, name: "final_photo.jpg")
@@ -255,6 +325,7 @@ final class SessionEngine {
             timerElapsed = 0
             baselinePhoto = nil
             finalPhoto = nil
+            progressPhotos = [:]
             comparisonText = ""
             spokenLine = ""
         }
@@ -421,9 +492,11 @@ final class SessionEngine {
 
         clearPhotosDirectory()
         progressPhotoLoops = []
+        progressPhotos = [:]
         completedLoops = []
         currentGoal = ""
         currentLoopNumber = 1
+        currentLoopDuration = 0
         pendingPhoto = nil
         photoSkipped = false
         memoryRecallText = nil
@@ -529,6 +602,7 @@ final class SessionEngine {
         persistCheckpoint()
         startLiveActivity(duration: workDuration, isWork: true, loopNumber: currentLoopNumber)
         let timerResult = await runTimer(duration: workDuration)
+        currentLoopDuration += timerElapsed
         endLiveActivity()
         guard !Task.isCancelled else { updateScreenAwake(enabled: false); return .finish }
         guard timerResult != .cancelled else { updateScreenAwake(enabled: false); return .finish }
@@ -583,8 +657,10 @@ final class SessionEngine {
                     goalText: currentGoal,
                     answers: [],
                     score: 0,
-                    scoreReason: ""
+                    scoreReason: "",
+                    duration: currentLoopDuration
                 ))
+                currentLoopDuration = 0
             }
 
             guard !Task.isCancelled else { return .finish }
@@ -689,6 +765,9 @@ final class SessionEngine {
                 }
             }
 
+            let totalDuration = completedLoops.reduce(0.0) { $0 + ($1.duration ?? 0.0) }
+            let loopDurations = completedLoops.map { $0.duration ?? 0.0 }
+
             let artifact = SessionArtifact(
                 id: UUID().uuidString,
                 date: Date(),
@@ -699,7 +778,9 @@ final class SessionEngine {
                 intentNext: intentNext,
                 loopsCompleted: completedLoops.count,
                 closingSentence: closing,
-                finalAnswers: finalAnswers
+                finalAnswers: finalAnswers,
+                totalDurationWorked: totalDuration,
+                loopDurations: loopDurations
             )
             
             // Save in background
@@ -945,6 +1026,7 @@ final class SessionEngine {
         completedLoops = checkpoint.completedLoops
         currentLoopAnswers = checkpoint.currentLoopAnswers
         currentLoopNumber = max(1, checkpoint.currentLoopNumber)
+        currentLoopDuration = 0
         currentGoal = checkpoint.currentGoal
         sessionMotivationLevel = checkpoint.motivationLevel
         totalLoops = min(6, max(1, checkpoint.totalLoops ?? 4))
@@ -956,12 +1038,16 @@ final class SessionEngine {
         baselinePhoto = loadPhotoFromDisk(name: "baseline_photo.jpg")
         finalPhoto = loadPhotoFromDisk(name: "final_photo.jpg")
         progressPhotoLoops = []
+        progressPhotos = [:]
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = docs.appendingPathComponent("photos", isDirectory: true)
         for i in 1...totalLoops {
             let fileURL = dir.appendingPathComponent("progress_photo_\(i).jpg")
             if FileManager.default.fileExists(atPath: fileURL.path) {
                 progressPhotoLoops.insert(i)
+                if let img = loadPhotoFromDisk(name: "progress_photo_\(i).jpg") {
+                    progressPhotos[i] = img
+                }
             }
         }
 
@@ -1010,8 +1096,8 @@ final class SessionEngine {
             return
         }
         endLiveActivity()
-        let attributes = TallyvityAttributes(goal: currentGoal, shortGoal: shortGoal, totalLoops: totalLoops)
-        let state = TallyvityAttributes.ContentState(
+        let attributes = DexarAttributes(goal: currentGoal, shortGoal: shortGoal, totalLoops: totalLoops)
+        let state = DexarAttributes.ContentState(
             endDate: Date().addingTimeInterval(duration),
             isWork: isWork,
             loopNumber: loopNumber
@@ -1035,7 +1121,7 @@ final class SessionEngine {
 
     private func updateLiveActivity(remainingDuration: TimeInterval, isWork: Bool, loopNumber: Int) {
         guard let activity = liveActivity else { return }
-        let state = TallyvityAttributes.ContentState(
+        let state = DexarAttributes.ContentState(
             endDate: Date().addingTimeInterval(remainingDuration),
             isWork: isWork,
             loopNumber: loopNumber

@@ -13,6 +13,7 @@ struct FocusView: View {
     @State private var loopCount = 4
     @State private var breakAmbientShift = false
     @State private var showEndAlert = false
+    @State private var showStopConfirmation = false
     @State private var goalTranscriptText = ""
     @FocusState private var captureFieldFocused: Bool
 
@@ -20,6 +21,25 @@ struct FocusView: View {
         ZStack {
             Color(.systemBackground).ignoresSafeArea()
             phaseContent
+        }
+        .overlay(alignment: .topLeading) {
+            if session.phase != .idle && session.phase != .sessionReport {
+                Button(action: {
+                    showStopConfirmation = true
+                }) {
+                    Image(systemName: "square")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.red.opacity(0.65))
+                        .frame(width: 32, height: 32)
+                        .background(
+                            Circle()
+                                .fill(Color.red.opacity(0.08))
+                        )
+                }
+                .padding(.leading, 24)
+                .padding(.top, 16)
+                .transition(.opacity)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $showSettings) {
@@ -51,6 +71,18 @@ struct FocusView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This will stop the current timer and end your progress.")
+        }
+        .confirmationDialog(
+            "Really end session?",
+            isPresented: $showStopConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("End and Show Overview", role: .destructive) {
+                session.forceEndSession()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will stop the timer and show your session overview.")
         }
         .onChange(of: session.transcript) { _, newValue in
             goalTranscriptText = newValue
@@ -119,6 +151,7 @@ struct FocusView: View {
                     artifact: artifact,
                     beforeImage: session.baselinePhoto,
                     afterImage: session.finalPhoto,
+                    progressPhotos: session.progressPhotos,
                     comparison: session.comparisonText,
                     onDismiss: session.dismissReport
                 )
@@ -155,7 +188,7 @@ struct FocusView: View {
 
             VStack(spacing: 44) {
                 VStack(spacing: 10) {
-                    Text("Tallyvity")
+                    Text("Dexar")
                         .font(.system(size: 34, weight: .light, design: .rounded))
                         .foregroundStyle(.primary)
 

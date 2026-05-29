@@ -163,6 +163,12 @@ struct SessionHistoryView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
+                if let total = artifact.totalDurationWorked {
+                    Label(formatDuration(total), systemImage: "clock")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 if !artifact.blocker.isEmpty {
                     Label("Blocked", systemImage: "exclamationmark.circle")
                         .font(.caption)
@@ -190,6 +196,18 @@ struct SessionHistoryView: View {
             .padding(.vertical, 4)
             .background(color.opacity(0.1))
             .clipShape(Capsule())
+    }
+
+    private func formatDuration(_ sec: TimeInterval) -> String {
+        let minutes = Int(sec) / 60
+        let seconds = Int(sec) % 60
+        if minutes > 0 {
+            if seconds > 0 {
+                return "\(minutes)m \(seconds)s"
+            }
+            return "\(minutes)m"
+        }
+        return "\(seconds)s"
     }
 
     private var emptyState: some View {

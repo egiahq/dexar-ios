@@ -1,13 +1,40 @@
 import SwiftUI
 import UIKit
 
+struct ReportPhoto: Identifiable {
+    let id = UUID()
+    let label: String
+    let image: UIImage
+}
+
 struct SessionReportView: View {
     let loops: [LoopRecord]
     let artifact: SessionArtifact
     var beforeImage: UIImage? = nil
     var afterImage: UIImage? = nil
+    var progressPhotos: [Int: UIImage] = [:]
     var comparison: String = ""
     var onDismiss: () -> Void
+
+    @State private var selectedPhotoForEnlargement: ReportPhoto? = nil
+
+    private var allPhotos: [ReportPhoto] {
+        var list: [ReportPhoto] = []
+        if let beforeImage {
+            list.append(ReportPhoto(label: "Before", image: beforeImage))
+        }
+        let sortedLoops = progressPhotos.keys.sorted()
+        for loop in sortedLoops {
+            if let img = progressPhotos[loop] {
+                let label = (loop == loops.count) ? "Loop \(loop) (After)" : "Loop \(loop)"
+                list.append(ReportPhoto(label: label, image: img))
+            }
+        }
+        if let afterImage, !list.contains(where: { $0.image == afterImage }) {
+            list.append(ReportPhoto(label: "After", image: afterImage))
+        }
+        return list
+    }
 
     var body: some View {
         ZStack {
@@ -16,6 +43,7 @@ struct SessionReportView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 32) {
                     header
+                    if artifact.totalDurationWorked != nil { timeWorkedSection }
                     if beforeImage != nil || afterImage != nil { comparisonSection }
                     if loops.contains(where: { $0.score > 0 }) { scores }
                     if !artifact.finalAnswers.isEmpty { answersSection }
@@ -29,6 +57,9 @@ struct SessionReportView: View {
                 .padding(.top, 48)
                 .padding(.bottom, 60)
             }
+        }
+        .fullScreenCover(item: $selectedPhotoForEnlargement) { reportPhoto in
+            PhotoDetailView(image: reportPhoto.image, label: reportPhoto.label)
         }
     }
 
@@ -58,9 +89,16 @@ struct SessionReportView: View {
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
 
-            HStack(spacing: 10) {
-                photoTile(label: "Before", image: beforeImage)
-                photoTile(label: "After", image: afterImage)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(allPhotos) { reportPhoto in
+                        photoTile(label: reportPhoto.label, image: reportPhoto.image)
+                            .frame(width: 140)
+                            .onTapGesture {
+                                selectedPhotoForEnlargement = reportPhoto
+                            }
+                    }
+                }
             }
 
             if !comparison.isEmpty {
@@ -204,11 +242,172 @@ struct SessionReportView: View {
         .padding(.top, 8)
     }
 
+    private var timeWorkedSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Focus Time")
+                .font(.caption)
+                .kerning(1.2)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+
+            HStack(spacing: 32) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(formatDuration(artifact.totalDurationWorked ?? 0))
+                        .font(.system(size: 28, weight: .light, design: .rounded))
+                        .foregroundStyle(.primary)
+                    Text("Total Work")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(artifact.loopsCompleted)")
+                        .font(.system(size: 28, weight: .light, design: .rounded))
+                        .foregroundStyle(.primary)
+                    Text("Completed Rounds")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.bottom, 6)
+
+            if let loopDurations = artifact.loopDurations, !loopDurations.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(Array(loopDurations.enumerated()), id: \.offset) { i, dur in
+                        HStack {
+                            Text("Round \(i + 1)")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(formatDuration(dur))
+                                .font(.subheadline.monospacedDigit())
+                                .foregroundStyle(.primary)
+                        }
+                        if i < loopDurations.count - 1 {
+                            Divider()
+                        }
+                    }
+                }
+                .padding(14)
+                .background(Color(.secondarySystemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+        }
+    }
+
+    private func formatDuration(_ sec: TimeInterval) -> String {
+        let minutes = Int(sec) / 60
+        let seconds = Int(sec) % 60
+        if minutes > 0 {
+            if seconds > 0 {
+                return "\(minutes)m \(seconds)s"
+            }
+            return "\(minutes)m"
+        }
+        return "\(seconds)s"
+    }
+
     private var formattedDate: String {
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .none
         return f.string(from: artifact.date)
+    }
+}
+
+struct ZoomableScrollView<Content: View>: UIViewRepresentable {
+    private var content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    func makeUIView(context: Context) -> UIScrollView {
+        let scrollView = UIScrollView()
+        scrollView.minimumZoomScale = 1.0
+        scrollView.maximumZoomScale = 5.0
+        scrollView.showsHorizontalScrollIndicator = false
+        scrollView.showsVerticalScrollIndicator = false
+        scrollView.delegate = context.coordinator
+
+        let hostedView = UIHostingController(rootView: content)
+        hostedView.view.backgroundColor = .clear
+        hostedView.view.translatesAutoresizingMaskIntoConstraints = false
+        scrollView.addSubview(hostedView.view)
+
+        NSLayoutConstraint.activate([
+            hostedView.view.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
+            hostedView.view.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
+            hostedView.view.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
+            hostedView.view.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
+            hostedView.view.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
+            hostedView.view.heightAnchor.constraint(equalTo: scrollView.frameLayoutGuide.heightAnchor)
+        ])
+
+        context.coordinator.hostingController = hostedView
+        return scrollView
+    }
+
+    func updateUIView(_ uiView: UIScrollView, context: Context) {
+        context.coordinator.hostingController?.rootView = content
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    class Coordinator: NSObject, UIScrollViewDelegate {
+        var hostingController: UIHostingController<Content>?
+
+        func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+            return hostingController?.view
+        }
+    }
+}
+
+struct PhotoDetailView: View {
+    let image: UIImage
+    let label: String
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            ZoomableScrollView {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            }
+            .ignoresSafeArea()
+
+            VStack {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(label)
+                            .font(.headline)
+                            .foregroundStyle(.white)
+                    }
+                    .padding(.leading, 20)
+                    .padding(.top, 10)
+
+                    Spacer()
+
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.title2)
+                            .foregroundStyle(.white.opacity(0.7))
+                            .background(Circle().fill(Color.black.opacity(0.3)))
+                    }
+                    .padding(.trailing, 20)
+                    .padding(.top, 10)
+                }
+                Spacer()
+            }
+            .padding(.top, 10)
+        }
     }
 }
 

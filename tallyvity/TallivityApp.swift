@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct TallyvityApp: App {
+struct DexarApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
