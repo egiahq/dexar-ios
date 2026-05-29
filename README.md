@@ -101,7 +101,7 @@ flowchart TD
 
 ```mermaid
 stateDiagram-v2
-    direction TB
+    direction LR
     
     state "Idle State" as Idle
     state "Goal Definition" as GoalCapture
@@ -115,6 +115,7 @@ stateDiagram-v2
     PreparingAudio --> GoalCapture: Audio Ready
     
     state GoalCapture {
+        direction TB
         [*] --> CaptureVoice: Transcribe Goal
         CaptureVoice --> PhotoBaseline: Capture Workspace
         PhotoBaseline --> [*]: Ready
@@ -124,6 +125,7 @@ stateDiagram-v2
     SessionReady --> WorkActive: Start Timer
     
     state Work_Loop {
+        direction TB
         state "Work Block" as WorkActive
         state "Quick Score" as SelfScore
         state "Rest Block" as BreakTime
@@ -140,6 +142,7 @@ stateDiagram-v2
     Work_Loop --> FinalQA: End Session
     
     state Reflection {
+        direction TB
         FinalQA --> StoringFinal: Complete Review
         StoringFinal --> SessionReport: Generate Summary
     }
