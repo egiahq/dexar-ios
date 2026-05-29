@@ -5,7 +5,6 @@ struct SettingsView: View {
     var settings: SettingsStore
 
     @State private var selectedModel: SettingsStore.WhisperModel
-    @State private var selectedVoice: SettingsStore.Voice
     @State private var editingName = false
     @State private var nameInput: String = ""
     @Environment(\.dismiss) private var dismiss
@@ -14,7 +13,6 @@ struct SettingsView: View {
         self.gemma = gemma
         self.settings = settings
         _selectedModel = State(initialValue: settings.whisperModel)
-        _selectedVoice = State(initialValue: settings.voice)
     }
 
     var body: some View {
@@ -37,19 +35,7 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("Voice") {
-                    ForEach(SettingsStore.Voice.allCases) { voice in
-                        checkRow(title: voice.displayName, selected: selectedVoice == voice) {
-                            selectedVoice = voice
-                            settings.voice = voice
-                        }
-                    }
-                }
-
                 Section("Diagnostics") {
-                    NavigationLink("Voice demo") {
-                        VoiceDemoWrapper(settings: settings)
-                    }
                     NavigationLink("Gemma chat") {
                         LLMDemoView(gemma: gemma)
                     }
@@ -146,19 +132,7 @@ struct SettingsView: View {
     }
 }
 
-// MARK: - Voice demo wrapper (uses SpeechEngine independently)
 
-struct VoiceDemoWrapper: View {
-    var settings: SettingsStore
-    @State private var engine = SpeechEngine()
-
-    var body: some View {
-        VoiceLoopView(engine: engine, settings: settings)
-            .task { await engine.requestPermissionAndLoad(settings: settings) }
-            .navigationTitle("Voice demo")
-            .navigationBarTitleDisplayMode(.inline)
-    }
-}
 
 #Preview {
     SettingsView(gemma: GemmaEngine(), settings: SettingsStore())
