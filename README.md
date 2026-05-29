@@ -32,42 +32,54 @@ The application is structured into four main layers: the SwiftUI Presentation La
 ### Core Component Relationships
 
 ```mermaid
-graph TD
+flowchart TD
+    %% Styling
+    classDef ui fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:#01579b
+    classDef core fill:#fff3e0,stroke:#e65100,stroke-width:2px,color:#e65100
+    classDef inference fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:#4a148c
+    classDef os fill:#f1f8e9,stroke:#33691e,stroke-width:2px,color:#33691e
+    classDef storage fill:#eceff1,stroke:#263238,stroke-width:2px,color:#263238,stroke-dasharray: 5 5
+
     %% Main Application Layer %%
     subgraph UI [SwiftUI Presentation Layer]
-        RootView[RootView] --> OnboardingView[OnboardingView]
-        RootView --> FocusView[FocusView]
-        FocusView --> SessionReportView[SessionReportView]
-        FocusView --> SettingsView[SettingsView]
+        RootView([RootView]):::ui
+        OnboardingView([OnboardingView]):::ui
+        FocusView([FocusView]):::ui
+        SessionReportView([SessionReportView]):::ui
+        SettingsView([SettingsView]):::ui
     end
 
     %% State Orchestration %%
     subgraph Core [Orchestration Layer]
-        SessionEngine[SessionEngine State Machine]
-        SessionStore[SessionStore Persistence]
-        PromptStore[PromptStore Template Cache]
+        SessionEngine[[SessionEngine State Machine]]:::core
+        SessionStore[[SessionStore Persistence]]:::core
+        PromptStore[[PromptStore Template Cache]]:::core
     end
 
     %% Intelligence Layer %%
     subgraph Inference [On-Device ML Suite]
-        SpeechEngine[SpeechEngine]
-        GemmaEngine[GemmaEngine]
+        SpeechEngine{SpeechEngine}:::inference
+        GemmaEngine{GemmaEngine}:::inference
         
-        %% Model engines
-        WhisperKit[WhisperKit STT]
-        TTSKit[TTSKit Speech Synthesis]
-        MLXGemma[MLX Gemma 4 VLM]
+        WhisperKit[/WhisperKit STT/]:::inference
+        TTSKit[/TTSKit Speech Synthesis/]:::inference
+        MLXGemma[/MLX Gemma 4 VLM/]:::inference
     end
 
     %% OS and Hardware integrations %%
     subgraph Apple_OS [Apple Native Frameworks]
-        AVFoundation[AVAudioSession & AVCaptureSession]
-        ActivityKit[ActivityKit Dynamic Island & Live Activities]
-        WidgetKit[WidgetKit Widget Extension]
+        AVFoundation[AVAudioSession & AVCaptureSession]:::os
+        ActivityKit[ActivityKit Dynamic Island]:::os
+        WidgetKit[WidgetKit Widget Extension]:::os
     end
 
     %% Core relationships %%
+    RootView --> OnboardingView
+    RootView --> FocusView
+    FocusView --> SessionReportView
+    FocusView --> SettingsView
     FocusView --> SessionEngine
+    
     SessionEngine --> SessionStore
     SessionEngine --> PromptStore
     SessionEngine --> SpeechEngine
@@ -80,7 +92,7 @@ graph TD
     GemmaEngine --> MLXGemma
     
     %% Storage & Widgets %%
-    SessionStore --> FileSystem[Local JSON Flat-files]
+    SessionStore --> FileSystem[(Local JSON Flat-files)]:::storage
     SessionEngine --> ActivityKit
     ActivityKit --> WidgetKit
 ```
@@ -89,28 +101,50 @@ graph TD
 
 ```mermaid
 stateDiagram-v2
+    direction TB
+    
+    state "Idle State" as Idle
+    state "Goal Definition" as GoalCapture
+    state "Focus Session" as Work_Loop
+    state "Reflection" as Reflection
+    
     [*] --> Idle
-    Idle --> MotivationSelection : Begin Session
-    MotivationSelection --> PreparingAudio : Submit Motivation
-    PreparingAudio --> GoalCapture : Speech Engine Ready
-    GoalCapture --> PhotoBaseline : Goal Captured
-    PhotoBaseline --> SessionReady : Stored or Skipped
-    SessionReady --> BackgroundPrep : Confirm Start
-    BackgroundPrep --> WorkActive : Initialize Timer
+    
+    Idle --> MotivationSelection: Start Session
+    MotivationSelection --> PreparingAudio: Select Motivation
+    PreparingAudio --> GoalCapture: Audio Ready
+    
+    state GoalCapture {
+        [*] --> CaptureVoice: Transcribe Goal
+        CaptureVoice --> PhotoBaseline: Capture Workspace
+        PhotoBaseline --> [*]: Ready
+    }
+    
+    GoalCapture --> SessionReady: Goal Confirmed
+    SessionReady --> WorkActive: Start Timer
     
     state Work_Loop {
-        WorkActive --> RoundEnd : Timer Complete or Skip
-        RoundEnd --> SelfScore : 2s Deceleration Complete
-        SelfScore --> Storing : Submit Score
-        Storing --> BreakTime : Persist Loop Record
-        BreakTime --> NextSessionCountdown : Timer Complete or Skip
-        NextSessionCountdown --> WorkActive : Next Loop Starts
+        state "Work Block" as WorkActive
+        state "Quick Score" as SelfScore
+        state "Rest Block" as BreakTime
+        
+        [*] --> WorkActive
+        WorkActive --> RoundEnd: Timer Complete
+        RoundEnd --> SelfScore: 2s Transition
+        SelfScore --> Storing: Submit Score
+        Storing --> BreakTime: Progress Saved
+        BreakTime --> NextRound: Rest Complete
+        NextRound --> WorkActive
     }
 
-    Storing --> FinalQA : Total Loops Reached or End Early
-    FinalQA --> StoringFinal : Complete 3 Questions
-    StoringFinal --> SessionReport : Generate Comparative Summary
-    SessionReport --> Idle : Dismiss Report
+    Work_Loop --> FinalQA: End Session
+    
+    state Reflection {
+        FinalQA --> StoringFinal: Complete Review
+        StoringFinal --> SessionReport: Generate Summary
+    }
+    
+    SessionReport --> Idle: Dismiss
 ```
 
 ---
@@ -151,37 +185,3 @@ If a user indicates low starting motivation, defined as a score of two or lower,
 
 ### Semantic Memory Retrieval
 When a user declares a new focus goal, Dexar uses a custom retrieval pipeline in `SessionStore` to search past history. Instead of relying on exact word matches, the store decomposes the current goal and past goals into character trigrams. It then calculates the cosine similarity between these frequency vectors. If a past session yields a similarity score above 0.18, Gemma is given the matching historical data to generate a memory recall prompt, reminding the user of prior blockers or next steps at the start of their new session.
-
----
-
-## Project Structure
-
-- **`dexar/`**: Contains the main iOS application target. This includes views like `FocusView` and `RootView`, state orchestrators like `SessionEngine`, storage pipelines like `SessionStore`, and on-device machine learning managers like `SpeechEngine` and `GemmaEngine`.
-- **`DexarWidget/`**: Contains the lock screen widget extension, Dynamic Island presentation configurations, and the WidgetBundle entry point.
-- **`voice_prompt_generator/`**: A Python-based developer utility. It includes `worker.py` and `main.py` to compile text-to-speech cues using custom speech embeddings, saving compressed M4A assets for inclusion in the app bundle.
-- **`docs/`**: Houses technical guides for model integration, Whisper configurations, and Silero VAD compilation steps.
-- **`specs/`**: Contains engineering spec files and master implementation trackers mapping the progress of system checkpoints.
-- **`audio_production/`**: Contains Ableton Live session templates used to master fixed audio cue assets.
-
----
-
-## Tech Stack
-
-- **User Interface:** SwiftUI
-- **Audio & Transcription:** AVAudioFoundation, WhisperKit
-- **On-Device Inference:** MLX Swift, CoreML (Gemma VLM, WhisperKit)
-- **Persistence:** Local file system storage (JSON Flat-files)
-- **Live Activities:** ActivityKit, WidgetKit
-
----
-
-## Developer Setup
-
-Building Dexar requires macOS 14.0 or later, Xcode 16.0 or later, and a device or simulator running iOS 18.0 or later. 
-
-1. Open `dexar.xcodeproj` in Xcode.
-2. The project resolves native Swift package manager dependencies, including Apple MLX, Swift Transformers, HuggingFace, and the Argmax open-source SDK.
-3. On first run, the app performs a one-time download of approximately 820 MB of cached files to initialize the WhisperKit and TTSKit models. 
-4. The 3.6 GB Gemma 4 vision-language model can be downloaded separately using the Diagnostics section in the app settings panel.
-5. Grant microphone and camera permissions on launch.
-6. Run-time diagnostics can be tested using the built-in LLM chat and voice loop views in the settings menu.
