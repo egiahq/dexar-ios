@@ -1,4 +1,4 @@
-# Dexar
+# Dexar iOS
 
 Dexar is a local-first, voice-driven focus coach and Pomodoro application built in SwiftUI. It uses on-device machine learning (WhisperKit, Gemma VLM) to help users declare goals, capture progress photos, reflect on their work, and analyze productivity. By relying entirely on local processing, the application guarantees user privacy and operates completely offline.
 
