@@ -9,6 +9,11 @@ import UserNotifications
 @Observable
 final class SessionEngine {
 
+    enum RoundEndChoice {
+        case workFiveMore
+        case startBreak
+    }
+
     private enum TimerResult {
         case completed
         case skipped
@@ -18,6 +23,7 @@ final class SessionEngine {
     private enum SessionFlowAction {
         case continueNext
         case finish
+        case workAgain
     }
 
     enum Phase: Equatable {
@@ -83,6 +89,10 @@ final class SessionEngine {
     private var timerTask: Task<Void, Never>?
 
     private var recordingStopped = false
+    private var goalCaptureContinuation: CheckedContinuation<Void, Never>?
+    private var roundEndContinuation: CheckedContinuation<RoundEndChoice, Never>?
+    private var pendingRoundEndChoice: RoundEndChoice?
+    private var originalWorkDuration: TimeInterval = 25 * 60
     private var pendingPhoto: UIImage? = nil
     private var photoSkipped = false
     private var timerSkipped = false
@@ -170,6 +180,11 @@ final class SessionEngine {
         wantsToStartNow = false
         startSessionContinuation?.resume()
         startSessionContinuation = nil
+        goalCaptureContinuation?.resume()
+        goalCaptureContinuation = nil
+        roundEndContinuation?.resume(returning: .startBreak)
+        roundEndContinuation = nil
+        pendingRoundEndChoice = nil
 
         endLiveActivity()
         updateScreenAwake(enabled: false)
@@ -225,6 +240,8 @@ final class SessionEngine {
     func retryGoal() {
         wantsToRetryGoal = true
         recordingStopped = true
+        goalCaptureContinuation?.resume()
+        goalCaptureContinuation = nil
     }
 
     func startNow() {
@@ -232,6 +249,8 @@ final class SessionEngine {
         recordingStopped = true
         photoSkipped = true
         timerSkipped = true
+        goalCaptureContinuation?.resume()
+        goalCaptureContinuation = nil
     }
 
     func backToGoal() {
@@ -241,11 +260,58 @@ final class SessionEngine {
         timerSkipped = true
         startSessionContinuation?.resume()
         startSessionContinuation = nil
+        goalCaptureContinuation?.resume()
+        goalCaptureContinuation = nil
     }
 
     func updateGoal(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         currentGoal = trimmed.isEmpty ? currentGoal : trimmed
+    }
+
+    func updateTranscript(_ text: String) {
+        transcript = text
+    }
+
+    func toggleRecording() {
+        if isRecording {
+            recordingStopped = true
+        } else {
+            recordingStopped = false
+            isRecording = true
+            try? speech.startRecording()
+            Task {
+                let deadline = Date().addingTimeInterval(30)
+                while !recordingStopped && Date() < deadline {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                withAnimation { isRecording = false }
+                let text = await speech.transcribeRecording()
+                withAnimation {
+                    if !text.isEmpty {
+                        if self.transcript.isEmpty {
+                            self.transcript = text
+                        } else {
+                            self.transcript += " " + text
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func confirmGoal() {
+        goalCaptureContinuation?.resume()
+        goalCaptureContinuation = nil
+    }
+
+    func selectRoundEndAction(_ choice: RoundEndChoice) {
+        if let continuation = roundEndContinuation {
+            continuation.resume(returning: choice)
+            roundEndContinuation = nil
+        } else {
+            pendingRoundEndChoice = choice
+        }
     }
 
     func confirmStartSession() {
@@ -325,12 +391,12 @@ final class SessionEngine {
             workDuration = 5 * 60
         }
 
-        // Setup loop: Goal -> Photo -> SessionReady (loops back on "Edit Goal")
+        originalWorkDuration = workDuration
+
         var sessionConfirmed = false
         while !sessionConfirmed && !Task.isCancelled {
             wantsToGoBackToGoal = false
 
-            // 1. Goal capture
             var goalAccepted = false
             while !goalAccepted && !Task.isCancelled {
                 wantsToRetryGoal = false
@@ -339,19 +405,18 @@ final class SessionEngine {
                 await sayFixed(cue: "goal_prompt", fallback: PromptStore.shared.fallback(for: "goal_capture"))
                 guard !Task.isCancelled else { return }
 
-                let captured = await listen(maxDuration: 30, silenceThreshold: 1.5)
+                if !currentGoal.isEmpty && transcript.isEmpty {
+                    transcript = currentGoal
+                }
+
+                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                    goalCaptureContinuation = cont
+                }
                 guard !Task.isCancelled else { return }
 
                 if wantsToRetryGoal { continue }
 
-                currentGoal = captured.isEmpty ? "Focus session" : captured
-
-                let waitStart = Date()
-                while Date().timeIntervalSince(waitStart) < 3.0 && !Task.isCancelled {
-                    if wantsToRetryGoal || wantsToStartNow { break }
-                    try? await Task.sleep(for: .milliseconds(100))
-                }
-                if wantsToRetryGoal { continue }
+                currentGoal = transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Focus session" : transcript
                 goalAccepted = true
             }
 
@@ -444,7 +509,7 @@ final class SessionEngine {
         withAnimation { phase = .roundEnd }
         haptic.impactOccurred(intensity: 0.7)
         if timerResult == .completed || timerResult == .skipped {
-            await speech.playCueAndWait(named: "end")
+            speech.playCue(named: "end")
         }
         updateScreenAwake(enabled: false)
 
@@ -467,38 +532,50 @@ final class SessionEngine {
         withAnimation { phase = .roundEnd }
         persistCheckpoint()
 
-        let pauseStart = Date()
-        while Date().timeIntervalSince(pauseStart) < 2.0 {
-            try? await Task.sleep(for: .milliseconds(100))
+        let choice: RoundEndChoice
+        if let pending = pendingRoundEndChoice {
+            choice = pending
+            pendingRoundEndChoice = nil
+        } else {
+            choice = await withCheckedContinuation { (cont: CheckedContinuation<RoundEndChoice, Never>) in
+                roundEndContinuation = cont
+            }
         }
 
         guard !Task.isCancelled else { return .finish }
 
-        withAnimation {
-            phase = .storing
-            completedLoops.append(LoopRecord(
-                goalText: currentGoal,
-                answers: [],
-                score: 0,
-                scoreReason: ""
+        switch choice {
+        case .workFiveMore:
+            workDuration = 5 * 60
+            return .workAgain
+        case .startBreak:
+            workDuration = originalWorkDuration
+            withAnimation {
+                phase = .storing
+                completedLoops.append(LoopRecord(
+                    goalText: currentGoal,
+                    answers: [],
+                    score: 0,
+                    scoreReason: ""
+                ))
+            }
+
+            guard !Task.isCancelled else { return .finish }
+
+            let isLong = completedLoops.count >= totalLoops
+            let breakDuration = isLong ? longBreakDuration : shortBreakDuration
+            let breakMinutes = max(1, Int(round(breakDuration / 60)))
+
+            sayFixedNonBlocking(cue: "break_start_prompt", fallback: selectVoiceLine(
+                cue: "break_start",
+                fallback: breakPromptPresets,
+                replacements: ["breakMinutes": "\(breakMinutes) minutes", "goal": currentGoal]
             ))
+
+            if !isLong { currentLoopNumber += 1 }
+            persistCheckpoint()
+            return .continueNext
         }
-
-        guard !Task.isCancelled else { return .finish }
-
-        let isLong = completedLoops.count >= totalLoops
-        let breakDuration = isLong ? longBreakDuration : shortBreakDuration
-        let breakMinutes = max(1, Int(round(breakDuration / 60)))
-
-        sayFixedNonBlocking(cue: "break_start_prompt", fallback: selectVoiceLine(
-            cue: "break_start",
-            fallback: breakPromptPresets,
-            replacements: ["breakMinutes": "\(breakMinutes) minutes", "goal": currentGoal]
-        ))
-
-        if !isLong { currentLoopNumber += 1 }
-        persistCheckpoint()
-        return .continueNext
     }
 
     private func runBreak() async -> SessionFlowAction {
@@ -852,6 +929,7 @@ final class SessionEngine {
         while !Task.isCancelled {
             let action = await runLoop()
             if action == .finish { break }
+            if action == .workAgain { continue }
 
             if action == .continueNext {
                 let breakAction = await runBreak()
@@ -892,6 +970,7 @@ final class SessionEngine {
         workDuration = checkpoint.workDuration
         shortBreakDuration = checkpoint.shortBreakDuration
         longBreakDuration = checkpoint.longBreakDuration
+        originalWorkDuration = checkpoint.workDuration
 
         withAnimation { phase = .preparingAudio }
         let speechReady = await speech.ensureReady()

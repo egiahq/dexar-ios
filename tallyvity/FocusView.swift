@@ -13,6 +13,8 @@ struct FocusView: View {
     @State private var loopCount = 4
     @State private var breakAmbientShift = false
     @State private var showEndAlert = false
+    @State private var goalTranscriptText = ""
+    @FocusState private var captureFieldFocused: Bool
 
     var body: some View {
         ZStack {
@@ -46,6 +48,17 @@ struct FocusView: View {
         } message: {
             Text("This will stop the current timer and end your progress.")
         }
+        .onChange(of: session.transcript) { _, newValue in
+            goalTranscriptText = newValue
+        }
+        .onChange(of: goalTranscriptText) { _, newValue in
+            session.updateTranscript(newValue)
+        }
+        .onChange(of: session.phase) { _, newPhase in
+            if newPhase == .goalCapture {
+                goalTranscriptText = session.transcript
+            }
+        }
     }
 
     // MARK: - Phase routing
@@ -65,9 +78,7 @@ struct FocusView: View {
         case .goalCapture:
             captureView(
                 title: "Say your goal",
-                hint: "What are you working on?",
-                showStop: false,
-                canRetry: false
+                hint: "What are you working on?"
             )
 
         case .photoBaseline:
@@ -83,7 +94,7 @@ struct FocusView: View {
             workView(loopNumber: loop)
 
         case .roundEnd:
-            transitionView(text: "Good.", showContinue: false)
+            roundEndView
 
         case .photoDelta:
             photoPromptView(isBaseline: false)
@@ -442,82 +453,75 @@ struct FocusView: View {
 
     // MARK: - Capture (goal / score)
 
-    private func captureView(title: String, hint: String, showStop: Bool, canRetry: Bool = false) -> some View {
+    private func captureView(title: String, hint: String) -> some View {
         VStack(spacing: 0) {
             Spacer()
 
             VStack(spacing: 28) {
-                // Label
+                if session.isRecording {
+                    RecordingPulse()
+                        .frame(height: 20)
+                } else if session.isProcessingSpeech {
+                    ProgressView()
+                        .frame(height: 20)
+                } else {
+                    Spacer()
+                        .frame(height: 20)
+                }
+
                 Text(title.uppercased())
                     .font(.system(size: 10, weight: .medium))
                     .kerning(1.6)
                     .foregroundStyle(.tertiary)
 
-                // Live transcript or placeholder
-                Text(session.transcript.isEmpty ? hint : session.transcript)
-                    .font(.title3.weight(session.isProcessingSpeech ? .regular : .semibold))
+                TextField(hint, text: $goalTranscriptText, axis: .vertical)
+                    .font(.title3.weight(.semibold))
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(promptTextColor(isPlaceholder: session.transcript.isEmpty))
+                    .lineLimit(3)
                     .padding(.horizontal, 36)
-                    .animation(.easeInOut(duration: 0.2), value: session.transcript)
-                    .animation(.easeInOut(duration: 0.2), value: session.isProcessingSpeech)
+                    .focused($captureFieldFocused)
+                    .submitLabel(.done)
 
-                recordingIndicator
+                Button(action: {
+                    session.toggleRecording()
+                }) {
+                    HStack(spacing: 8) {
+                        Image(systemName: session.isRecording ? "stop.fill" : "mic.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                        Text(session.isRecording ? "Stop Recording" : "Record Voice")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                    .foregroundStyle(session.isRecording ? .red : .primary)
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 12)
+                    .background(Color(.secondarySystemBackground))
+                    .clipShape(Capsule())
+                }
+                .disabled(session.isProcessingSpeech && !session.isRecording)
             }
 
             Spacer()
 
-            if canRetry && !session.isRecording {
-                HStack(spacing: 24) {
-                    Button(action: session.retryGoal) {
-                        Text("Retry")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 10)
-                            .background(Color(.secondarySystemBackground))
-                            .clipShape(Capsule())
-                    }
-                    Button(action: session.startNow) {
-                        Text("Start now")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.primary)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 10)
-                            .background(Color(.secondarySystemBackground))
-                            .clipShape(Capsule())
-                    }
-                }
-                .transition(.opacity)
-                .padding(.bottom, 52)
-            } else if showStop && session.isRecording {
-                Button(action: session.stopListening) {
-                    Text("Done")
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 10)
+            if !session.isRecording && !session.isProcessingSpeech {
+                Button(action: {
+                    captureFieldFocused = false
+                    session.confirmGoal()
+                }) {
+                    Text("Next")
+                        .font(.headline.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 40)
+                        .padding(.vertical, 16)
                         .background(Color(.secondarySystemBackground))
                         .clipShape(Capsule())
                 }
                 .transition(.opacity)
-                .padding(.bottom, 52)
+                .padding(.bottom, 24)
             }
 
             sessionControls(canSkip: false)
                 .padding(.bottom, 48)
         }
-    }
-
-    private var recordingIndicator: some View {
-        ZStack {
-            if session.isRecording {
-                RecordingPulse()
-            }
-        }
-        .frame(height: 36)
-        .padding(.bottom, 20)
-        .animation(.easeInOut(duration: 0.2), value: session.isRecording)
     }
 
     // MARK: - Photo
@@ -614,9 +618,46 @@ struct FocusView: View {
             Text(text)
                 .font(.system(size: 22, weight: .light))
                 .foregroundStyle(.secondary)
-            
-            // Continue button intentionally removed per user request:
-            // "when it says 'good', clicking continue does not do anything until the sound finished playing, so remove the button and automatically move on isntead."
+        }
+    }
+
+    private var roundEndView: some View {
+        VStack(spacing: 32) {
+            Spacer()
+
+            Text("Good.")
+                .font(.system(size: 22, weight: .light))
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            VStack(spacing: 16) {
+                Button(action: {
+                    session.selectRoundEndAction(.workFiveMore)
+                }) {
+                    Text("Work for 5 more minutes")
+                        .font(.headline.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color(.secondarySystemBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+
+                Button(action: {
+                    session.selectRoundEndAction(.startBreak)
+                }) {
+                    Text("Start break")
+                        .font(.headline.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color(.quaternarySystemFill))
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
+                }
+            }
+            .padding(.horizontal, 40)
+            .padding(.bottom, 48)
         }
     }
 

@@ -23,7 +23,6 @@
 		0E64F0352F970BF70059DD25 /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = 0E64F0342F970BF70059DD25 /* Transformers */; };
 		0EA4389F2F96E5CA0087FD93 /* ArgmaxOSS in Frameworks */ = {isa = PBXBuildFile; productRef = 0EA4389E2F96E5CA0087FD93 /* ArgmaxOSS */; };
 		0EA438A12F96E5CA0087FD93 /* SpeakerKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0EA438A02F96E5CA0087FD93 /* SpeakerKit */; };
-		0EA438A32F96E5CA0087FD93 /* TTSKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0EA438A22F96E5CA0087FD93 /* TTSKit */; };
 		0EA438A52F96E5CA0087FD93 /* WhisperKit in Frameworks */ = {isa = PBXBuildFile; productRef = 0EA438A42F96E5CA0087FD93 /* WhisperKit */; };
 /* End PBXBuildFile section */
 
@@ -106,7 +105,6 @@
 				0E64F02B2F9708E20059DD25 /* MLXVLM in Frameworks */,
 				0E64F0272F9708E20059DD25 /* MLXHuggingFace in Frameworks */,
 				0E64F0312F970BF70059DD25 /* Hub in Frameworks */,
-				0EA438A32F96E5CA0087FD93 /* TTSKit in Frameworks */,
 				0E64F0202F9707840059DD25 /* MLXRandom in Frameworks */,
 				0E64F0332F970BF70059DD25 /* Tokenizers in Frameworks */,
 				0EA4389F2F96E5CA0087FD93 /* ArgmaxOSS in Frameworks */,
@@ -198,7 +196,6 @@
 			packageProductDependencies = (
 				0EA4389E2F96E5CA0087FD93 /* ArgmaxOSS */,
 				0EA438A02F96E5CA0087FD93 /* SpeakerKit */,
-				0EA438A22F96E5CA0087FD93 /* TTSKit */,
 				0EA438A42F96E5CA0087FD93 /* WhisperKit */,
 				0E64F0192F9707840059DD25 /* MLX */,
 				0E64F01B2F9707840059DD25 /* MLXFast */,
@@ -336,7 +333,7 @@
 				DEVELOPMENT_TEAM = 9LKY7MBW4C;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TallyvityWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = TallyvityWidget;
+				INFOPLIST_KEY_CFBundleDisplayName = "Dexar Widget";
 				INFOPLIST_KEY_NSCriticalMessagingUsageDescription = "Help user stay on track with tasks.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -369,7 +366,7 @@
 				DEVELOPMENT_TEAM = 9LKY7MBW4C;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = TallyvityWidget/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = TallyvityWidget;
+				INFOPLIST_KEY_CFBundleDisplayName = "Dexar Widget";
 				INFOPLIST_KEY_NSCriticalMessagingUsageDescription = "Help user stay on track with tasks.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
@@ -527,7 +524,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Tallyvity;
+				INFOPLIST_KEY_CFBundleDisplayName = Dexar;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -570,7 +567,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Tallyvity;
+				INFOPLIST_KEY_CFBundleDisplayName = Dexar;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -744,11 +741,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 0EA4389D2F96E5CA0087FD93 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
 			productName = SpeakerKit;
-		};
-		0EA438A22F96E5CA0087FD93 /* TTSKit */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 0EA4389D2F96E5CA0087FD93 /* XCRemoteSwiftPackageReference "argmax-oss-swift" */;
-			productName = TTSKit;
 		};
 		0EA438A42F96E5CA0087FD93 /* WhisperKit */ = {
 			isa = XCSwiftPackageProductDependency;
