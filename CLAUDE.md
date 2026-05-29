@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Build & Run
 
-Open `tallyvity.xcodeproj` in Xcode. Build: `Cmd+B`. Run on simulator: `Cmd+R`. No CLI build setup — Xcode only.
+Open `dexar.xcodeproj` in Xcode. Build: `Cmd+B`. Run on simulator: `Cmd+R`. No CLI build setup — Xcode only.
 
 ## App Overview
 

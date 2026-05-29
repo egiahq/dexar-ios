@@ -41,7 +41,7 @@ struct SimpleEntry: TimelineEntry {
     let configuration: ConfigurationAppIntent
 }
 
-struct TallyvityWidgetEntryView : View {
+struct DexarWidgetEntryView : View {
     var entry: Provider.Entry
 
     var body: some View {
@@ -55,12 +55,12 @@ struct TallyvityWidgetEntryView : View {
     }
 }
 
-struct TallyvityWidget: Widget {
-    let kind: String = "TallyvityWidget"
+struct DexarWidget: Widget {
+    let kind: String = "DexarWidget"
 
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: kind, intent: ConfigurationAppIntent.self, provider: Provider()) { entry in
-            TallyvityWidgetEntryView(entry: entry)
+            DexarWidgetEntryView(entry: entry)
                 .containerBackground(.fill.tertiary, for: .widget)
         }
     }
@@ -81,7 +81,7 @@ extension ConfigurationAppIntent {
 }
 
 #Preview(as: .systemSmall) {
-    TallyvityWidget()
+    DexarWidget()
 } timeline: {
     SimpleEntry(date: .now, configuration: .smiley)
     SimpleEntry(date: .now, configuration: .starEyes)

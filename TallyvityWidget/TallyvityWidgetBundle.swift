@@ -9,10 +9,10 @@ import WidgetKit
 import SwiftUI
 
 @main
-struct TallyvityWidgetBundle: WidgetBundle {
+struct DexarWidgetBundle: WidgetBundle {
     var body: some Widget {
-        TallyvityWidget()
-        TallyvityWidgetControl()
-        TallyvityWidgetLiveActivity()
+        DexarWidget()
+        DexarWidgetControl()
+        DexarWidgetLiveActivity()
     }
 }

@@ -9,8 +9,8 @@ import AppIntents
 import SwiftUI
 import WidgetKit
 
-struct TallyvityWidgetControl: ControlWidget {
-    static let kind: String = "elano.tallyvity.app.TallyvityWidget"
+struct DexarWidgetControl: ControlWidget {
+    static let kind: String = "elano.dexar.app.DexarWidget"
 
     var body: some ControlWidgetConfiguration {
         AppIntentControlConfiguration(
@@ -30,7 +30,7 @@ struct TallyvityWidgetControl: ControlWidget {
     }
 }
 
-extension TallyvityWidgetControl {
+extension DexarWidgetControl {
     struct Value {
         var isRunning: Bool
         var name: String
@@ -38,12 +38,12 @@ extension TallyvityWidgetControl {
 
     struct Provider: AppIntentControlValueProvider {
         func previewValue(configuration: TimerConfiguration) -> Value {
-            TallyvityWidgetControl.Value(isRunning: false, name: configuration.timerName)
+            DexarWidgetControl.Value(isRunning: false, name: configuration.timerName)
         }
 
         func currentValue(configuration: TimerConfiguration) async throws -> Value {
             let isRunning = true // Check if the timer is running
-            return TallyvityWidgetControl.Value(isRunning: isRunning, name: configuration.timerName)
+            return DexarWidgetControl.Value(isRunning: isRunning, name: configuration.timerName)
         }
     }
 }

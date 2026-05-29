@@ -1,7 +1,7 @@
 import ActivityKit
 import Foundation
 
-struct TallyvityAttributes: ActivityAttributes {
+struct DexarAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable {
         var endDate: Date
         var isWork: Bool

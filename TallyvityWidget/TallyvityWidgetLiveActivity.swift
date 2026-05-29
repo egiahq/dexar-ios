@@ -2,9 +2,9 @@ import ActivityKit
 import WidgetKit
 import SwiftUI
 
-struct TallyvityWidgetLiveActivity: Widget {
+struct DexarWidgetLiveActivity: Widget {
     var body: some WidgetConfiguration {
-        ActivityConfiguration(for: TallyvityAttributes.self) { context in
+        ActivityConfiguration(for: DexarAttributes.self) { context in
             HStack(spacing: 16) {
                 VStack(alignment: .leading, spacing: 2) {
                     Label {
@@ -102,46 +102,46 @@ struct TallyvityWidgetLiveActivity: Widget {
     }
 }
 
-extension TallyvityAttributes {
-    fileprivate static var preview: TallyvityAttributes {
-        TallyvityAttributes(goal: "Write the proposal", shortGoal: "Proposal", totalLoops: 4)
+extension DexarAttributes {
+    fileprivate static var preview: DexarAttributes {
+        DexarAttributes(goal: "Write the proposal", shortGoal: "Proposal", totalLoops: 4)
     }
 }
 
-extension TallyvityAttributes.ContentState {
-    fileprivate static var working: TallyvityAttributes.ContentState {
-        TallyvityAttributes.ContentState(endDate: Date().addingTimeInterval(1200), isWork: true, loopNumber: 2)
+extension DexarAttributes.ContentState {
+    fileprivate static var working: DexarAttributes.ContentState {
+        DexarAttributes.ContentState(endDate: Date().addingTimeInterval(1200), isWork: true, loopNumber: 2)
     }
 
-    fileprivate static var onBreak: TallyvityAttributes.ContentState {
-        TallyvityAttributes.ContentState(endDate: Date().addingTimeInterval(300), isWork: false, loopNumber: 2)
+    fileprivate static var onBreak: DexarAttributes.ContentState {
+        DexarAttributes.ContentState(endDate: Date().addingTimeInterval(300), isWork: false, loopNumber: 2)
     }
 }
 
-#Preview("Notification", as: .content, using: TallyvityAttributes.preview) {
-    TallyvityWidgetLiveActivity()
+#Preview("Notification", as: .content, using: DexarAttributes.preview) {
+    DexarWidgetLiveActivity()
 } contentStates: {
-    TallyvityAttributes.ContentState.working
-    TallyvityAttributes.ContentState.onBreak
+    DexarAttributes.ContentState.working
+    DexarAttributes.ContentState.onBreak
 }
 
-#Preview("Dynamic Island Compact", as: .dynamicIsland(.compact), using: TallyvityAttributes.preview) {
-    TallyvityWidgetLiveActivity()
+#Preview("Dynamic Island Compact", as: .dynamicIsland(.compact), using: DexarAttributes.preview) {
+    DexarWidgetLiveActivity()
 } contentStates: {
-    TallyvityAttributes.ContentState.working
-    TallyvityAttributes.ContentState.onBreak
+    DexarAttributes.ContentState.working
+    DexarAttributes.ContentState.onBreak
 }
 
-#Preview("Dynamic Island Expanded", as: .dynamicIsland(.expanded), using: TallyvityAttributes.preview) {
-    TallyvityWidgetLiveActivity()
+#Preview("Dynamic Island Expanded", as: .dynamicIsland(.expanded), using: DexarAttributes.preview) {
+    DexarWidgetLiveActivity()
 } contentStates: {
-    TallyvityAttributes.ContentState.working
-    TallyvityAttributes.ContentState.onBreak
+    DexarAttributes.ContentState.working
+    DexarAttributes.ContentState.onBreak
 }
 
-#Preview("Dynamic Island Minimal", as: .dynamicIsland(.minimal), using: TallyvityAttributes.preview) {
-    TallyvityWidgetLiveActivity()
+#Preview("Dynamic Island Minimal", as: .dynamicIsland(.minimal), using: DexarAttributes.preview) {
+    DexarWidgetLiveActivity()
 } contentStates: {
-    TallyvityAttributes.ContentState.working
-    TallyvityAttributes.ContentState.onBreak
+    DexarAttributes.ContentState.working
+    DexarAttributes.ContentState.onBreak
 }
