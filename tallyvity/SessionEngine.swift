@@ -79,8 +79,9 @@ final class SessionEngine {
     private(set) var pendingCheckpoint: SessionStore.SessionCheckpoint? = nil
     private(set) var spokenLine: String = ""
     private(set) var baselinePhoto: UIImage? = nil
-    private(set) var finalPhoto: UIImage? = nil
-    private(set) var progressPhotos: [Int: UIImage] = [:]
+    private(set) var finalPhotos: [UIImage] = []
+    var finalPhoto: UIImage? { finalPhotos.last }
+    private(set) var progressPhotos: [Int: [UIImage]] = [:]
     private(set) var comparisonText: String = ""
     private(set) var progressPhotoLoops: Set<Int> = []
     private(set) var reflectionTranscript: String = ""
@@ -305,12 +306,86 @@ final class SessionEngine {
     }
 
     func setProgressPhoto(_ image: UIImage) {
+        addProgressPhoto(image)
+    }
+
+    func addProgressPhoto(_ image: UIImage) {
         let loop = currentLoopNumber
         progressPhotoLoops.insert(loop)
-        progressPhotos[loop] = image
-        savePhotoToDisk(image, name: "progress_photo_\(loop).jpg")
-        finalPhoto = image
-        savePhotoToDisk(image, name: "final_photo.jpg")
+        var currentList = progressPhotos[loop] ?? []
+        currentList.append(image)
+        progressPhotos[loop] = currentList
+        
+        let index = currentList.count - 1
+        savePhotoToDisk(image, name: "progress_photo_\(loop)_\(index).jpg")
+        persistCheckpoint()
+    }
+
+    func deleteProgressPhoto(at index: Int, inLoop loop: Int) {
+        guard var currentList = progressPhotos[loop], currentList.indices.contains(index) else { return }
+        currentList.remove(at: index)
+        if currentList.isEmpty {
+            progressPhotos.removeValue(forKey: loop)
+            progressPhotoLoops.remove(loop)
+        } else {
+            progressPhotos[loop] = currentList
+        }
+        
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("photos", isDirectory: true)
+        
+        var i = 0
+        while true {
+            let fileURL = dir.appendingPathComponent("progress_photo_\(loop)_\(i).jpg")
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try? FileManager.default.removeItem(at: fileURL)
+                i += 1
+            } else {
+                break
+            }
+        }
+        
+        if let remaining = progressPhotos[loop] {
+            for (idx, img) in remaining.enumerated() {
+                savePhotoToDisk(img, name: "progress_photo_\(loop)_\(idx).jpg")
+            }
+        }
+        
+        persistCheckpoint()
+    }
+
+    func addFinalPhoto(_ image: UIImage) {
+        finalPhotos.append(image)
+        let index = finalPhotos.count - 1
+        savePhotoToDisk(image, name: "final_photo_\(index).jpg")
+        pendingPhoto = image
+        persistCheckpoint()
+    }
+
+    func deleteFinalPhoto(at index: Int) {
+        guard finalPhotos.indices.contains(index) else { return }
+        finalPhotos.remove(at: index)
+        
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("photos", isDirectory: true)
+        
+        var i = 0
+        while true {
+            let fileURL = dir.appendingPathComponent("final_photo_\(i).jpg")
+            if FileManager.default.fileExists(atPath: fileURL.path) {
+                try? FileManager.default.removeItem(at: fileURL)
+                i += 1
+            } else {
+                break
+            }
+        }
+        
+        for (idx, img) in finalPhotos.enumerated() {
+            savePhotoToDisk(img, name: "final_photo_\(idx).jpg")
+        }
+        
+        pendingPhoto = finalPhotos.last
+        persistCheckpoint()
     }
 
     func savePhotoToDisk(_ image: UIImage, name: String) {
@@ -341,6 +416,10 @@ final class SessionEngine {
 
     func skipPhoto() {
         photoSkipped = true
+        if let continuation = photoDeltaContinuation {
+            photoDeltaContinuation = nil
+            continuation.resume()
+        }
     }
 
     func dismissReport() {
@@ -353,7 +432,7 @@ final class SessionEngine {
             timerProgress = 0
             timerElapsed = 0
             baselinePhoto = nil
-            finalPhoto = nil
+            finalPhotos = []
             progressPhotos = [:]
             comparisonText = ""
             spokenLine = ""
@@ -440,9 +519,12 @@ final class SessionEngine {
             recordingStopped = true
         } else {
             recordingStopped = false
-            isRecording = true
-            try? speech.startRecording()
             Task {
+                let ready = await speech.ensureReady()
+                guard ready else { return }
+                guard !recordingStopped else { return }
+                isRecording = true
+                try? speech.startRecording()
                 let deadline = Date().addingTimeInterval(30)
                 while !recordingStopped && Date() < deadline {
                     try? await Task.sleep(for: .milliseconds(100))
@@ -501,9 +583,12 @@ final class SessionEngine {
         } else {
             reflectionTranscript = ""
             recordingStopped = false
-            isRecording = true
-            try? speech.startRecording()
             Task {
+                let ready = await speech.ensureReady()
+                guard ready else { return }
+                guard !recordingStopped else { return }
+                isRecording = true
+                try? speech.startRecording()
                 let deadline = Date().addingTimeInterval(60)
                 while !recordingStopped && Date() < deadline {
                     try? await Task.sleep(for: .milliseconds(100))
@@ -585,7 +670,7 @@ final class SessionEngine {
         memoryRecallText = nil
         finalArtifact = nil
         baselinePhoto = nil
-        finalPhoto = nil
+        finalPhotos = []
         comparisonText = ""
         spokenLine = ""
 
@@ -630,13 +715,7 @@ final class SessionEngine {
 
             sessionMotivationLevel = motivation
 
-            // 3. Prepare audio
-            withAnimation { phase = .preparingAudio }
-            let speechReady = await speech.ensureReady()
-            guard speechReady else {
-                withAnimation { phase = .error(PromptStore.shared.string(for: "error_models_unavailable")) }
-                return
-            }
+
 
             needsStarterDecision = motivation <= 2
             if needsStarterDecision {
@@ -1136,15 +1215,26 @@ final class SessionEngine {
         await finishSession()
     }
 
+    private var photoDeltaContinuation: CheckedContinuation<Void, Never>? = nil
+
+    func completePhotoDelta() {
+        photoDeltaContinuation?.resume()
+        photoDeltaContinuation = nil
+    }
+
     private func capturePhotoDelta() async {
         guard let baseline = baselinePhoto, !Task.isCancelled else { return }
         withAnimation { phase = .photoDelta }
         pendingPhoto = nil
         photoSkipped = false
-        let final = await waitForPhoto(timeout: 60)
+        
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            photoDeltaContinuation = cont
+        }
+        
         guard !Task.isCancelled else { return }
-        guard let final else { return }
-        withAnimation { finalPhoto = final }
+        guard let final = finalPhotos.first else { return }
+        
         let prompt = """
         The first image is a workspace at the START of a focus session. The second image is the SAME workspace at the END. The goal was: \(currentGoal).
         Describe the concrete visual differences between the two images and what progress they show. Be specific and factual. Two or three sentences.
@@ -1208,27 +1298,53 @@ final class SessionEngine {
         }
 
         baselinePhoto = loadPhotoFromDisk(name: "baseline_photo.jpg")
-        finalPhoto = loadPhotoFromDisk(name: "final_photo.jpg")
-        progressPhotoLoops = []
-        progressPhotos = [:]
+        
+        finalPhotos = []
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = docs.appendingPathComponent("photos", isDirectory: true)
+        
+        var fIdx = 0
+        while true {
+            let name = "final_photo_\(fIdx).jpg"
+            let fileURL = dir.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: fileURL.path), let img = loadPhotoFromDisk(name: name) {
+                finalPhotos.append(img)
+                fIdx += 1
+            } else {
+                break
+            }
+        }
+        if finalPhotos.isEmpty, let oldFinal = loadPhotoFromDisk(name: "final_photo.jpg") {
+            finalPhotos.append(oldFinal)
+        }
+        
+        progressPhotoLoops = []
+        progressPhotos = [:]
         for i in 1...totalLoops {
-            let fileURL = dir.appendingPathComponent("progress_photo_\(i).jpg")
-            if FileManager.default.fileExists(atPath: fileURL.path) {
-                progressPhotoLoops.insert(i)
-                if let img = loadPhotoFromDisk(name: "progress_photo_\(i).jpg") {
-                    progressPhotos[i] = img
+            var loopPhotos: [UIImage] = []
+            var pIdx = 0
+            while true {
+                let name = "progress_photo_\(i)_\(pIdx).jpg"
+                let fileURL = dir.appendingPathComponent(name)
+                if FileManager.default.fileExists(atPath: fileURL.path), let img = loadPhotoFromDisk(name: name) {
+                    loopPhotos.append(img)
+                    pIdx += 1
+                } else {
+                    break
                 }
+            }
+            let oldName = "progress_photo_\(i).jpg"
+            let oldFileURL = dir.appendingPathComponent(oldName)
+            if loopPhotos.isEmpty && FileManager.default.fileExists(atPath: oldFileURL.path), let img = loadPhotoFromDisk(name: oldName) {
+                loopPhotos.append(img)
+            }
+            
+            if !loopPhotos.isEmpty {
+                progressPhotoLoops.insert(i)
+                progressPhotos[i] = loopPhotos
             }
         }
 
-        withAnimation { phase = .preparingAudio }
-        let speechReady = await speech.ensureReady()
-        guard speechReady else {
-            withAnimation { phase = .error(PromptStore.shared.string(for: "error_models_unavailable")) }
-            return
-        }
         guard !Task.isCancelled else { return }
 
         if !resumeIsWork {

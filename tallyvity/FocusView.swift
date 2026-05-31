@@ -11,6 +11,7 @@ struct FocusView: View {
     @State private var showCamera = false
     @State private var showHistory = false
     @State private var showAnalytics = false
+    @State private var photoGallery: PhotoGallery? = nil
     @State private var showResumeAlert = false
     @State private var checkpointToResume: SessionStore.SessionCheckpoint? = nil
     @State private var focusMinutes = 25
@@ -59,13 +60,18 @@ struct FocusView: View {
         .sheet(isPresented: $showCamera) {
             CameraPickerView { image in
                 if session.phase == .roundEnd {
-                    session.setProgressPhoto(image)
+                    session.addProgressPhoto(image)
+                } else if session.phase == .photoDelta {
+                    session.addFinalPhoto(image)
                 } else {
                     session.setBaselinePhoto(image)
                 }
                 showCamera = false
             }
             .ignoresSafeArea()
+        }
+        .fullScreenCover(item: $photoGallery) { gallery in
+            PhotoGalleryView(photos: gallery.photos, initialIndex: gallery.initialIndex)
         }
         .task {
             session.loadPendingCheckpoint(userName: settings.userName)
@@ -179,7 +185,7 @@ struct FocusView: View {
                     loops: session.completedLoops,
                     artifact: artifact,
                     beforeImage: session.baselinePhoto,
-                    afterImage: session.finalPhoto,
+                    afterImages: session.finalPhotos,
                     progressPhotos: session.progressPhotos,
                     comparison: session.comparisonText,
                     session: session,
@@ -374,6 +380,15 @@ struct FocusView: View {
                 loopDots(current: loopNumber)
                     .padding(.top, 60)
 
+                if !session.currentGoal.isEmpty {
+                    Text(session.currentGoal)
+                        .font(.system(size: 24, weight: .medium))
+                        .foregroundStyle(Color.appForeground)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 36)
+                        .padding(.top, 24)
+                }
+
                 Spacer()
 
                 TimerRingView(
@@ -382,8 +397,6 @@ struct FocusView: View {
                     remainingTime: session.remainingTime
                 )
                 .frame(width: 280, height: 280)
-
-
 
                 Spacer()
 
@@ -425,6 +438,15 @@ struct FocusView: View {
             VStack(spacing: 0) {
                 loopDots(current: loopNumber)
                     .padding(.top, 60)
+
+                if !session.currentGoal.isEmpty {
+                    Text(session.currentGoal)
+                        .font(.system(size: 24, weight: .medium))
+                        .foregroundStyle(Color.appForeground)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 36)
+                        .padding(.top, 24)
+                }
 
                 Spacer()
 
@@ -683,24 +705,55 @@ struct FocusView: View {
             Spacer()
 
             VStack(spacing: 12) {
-                Button(action: { showCamera = true }) {
-                    Label("Take Photo", systemImage: "camera")
-                        .font(.headline.weight(.medium))
-                        .foregroundStyle(Color.appForeground)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Color.appSecondaryBackground)
-                        .clipShape(Rectangle())
-                }
+                if !isBaseline && !session.finalPhotos.isEmpty {
+                    PhotoScrollView(
+                        images: session.finalPhotos,
+                        onAdd: {
+                            showCamera = true
+                        },
+                        onDelete: { idx in
+                            session.deleteFinalPhoto(at: idx)
+                        },
+                        onSelect: { idx in
+                            let galleryPhotos = session.finalPhotos.enumerated().map { (offset, img) in
+                                ReportPhoto(label: "End (\(offset + 1)/\(session.finalPhotos.count))", image: img)
+                            }
+                            photoGallery = PhotoGallery(photos: galleryPhotos, initialIndex: idx)
+                        }
+                    )
+                    .padding(.bottom, 16)
+                    
+                    Button(action: {
+                        session.completePhotoDelta()
+                    }) {
+                        Text("Done")
+                            .font(.headline.weight(.medium))
+                            .foregroundStyle(Color.appForeground)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(Color.appSecondaryBackground)
+                            .clipShape(Rectangle())
+                    }
+                } else {
+                    Button(action: { showCamera = true }) {
+                        Label("Take Photo", systemImage: "camera")
+                            .font(.headline.weight(.medium))
+                            .foregroundStyle(Color.appForeground)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(Color.appSecondaryBackground)
+                            .clipShape(Rectangle())
+                    }
 
-                Button(action: session.skipPhoto) {
-                    Text("Skip")
-                        .font(.headline.weight(.medium))
-                        .foregroundStyle(Color.appMutedForeground)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
-                        .background(Color.appTertiaryBackground)
-                        .clipShape(Rectangle())
+                    Button(action: session.skipPhoto) {
+                        Text("Skip")
+                            .font(.headline.weight(.medium))
+                            .foregroundStyle(Color.appMutedForeground)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .background(Color.appTertiaryBackground)
+                            .clipShape(Rectangle())
+                    }
                 }
 
                 if isBaseline {
@@ -754,20 +807,39 @@ struct FocusView: View {
             Spacer()
 
             VStack(spacing: 16) {
-                let hasPhoto = session.progressPhotoLoops.contains(session.currentLoopNumber)
-                Button(action: {
-                    showCamera = true
-                }) {
-                    HStack(spacing: 8) {
-                        Image(systemName: hasPhoto ? "checkmark.circle.fill" : "camera")
-                        Text(hasPhoto ? "Photo captured" : "Take progress photo")
+                let currentPhotos = session.progressPhotos[session.currentLoopNumber] ?? []
+                if !currentPhotos.isEmpty {
+                    PhotoScrollView(
+                        images: currentPhotos,
+                        onAdd: {
+                            showCamera = true
+                        },
+                        onDelete: { idx in
+                            session.deleteProgressPhoto(at: idx, inLoop: session.currentLoopNumber)
+                        },
+                        onSelect: { idx in
+                            let galleryPhotos = currentPhotos.enumerated().map { (offset, img) in
+                                ReportPhoto(label: "Loop \(session.currentLoopNumber) (\(offset + 1)/\(currentPhotos.count))", image: img)
+                            }
+                            photoGallery = PhotoGallery(photos: galleryPhotos, initialIndex: idx)
+                        }
+                    )
+                    .padding(.bottom, 8)
+                } else {
+                    Button(action: {
+                        showCamera = true
+                    }) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "camera")
+                            Text("Take progress photo")
+                        }
+                        .font(.headline.weight(.medium))
+                        .foregroundStyle(Color.appForeground)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16)
+                        .background(Color.appSecondaryBackground)
+                        .clipShape(Rectangle())
                     }
-                    .font(.headline.weight(.medium))
-                    .foregroundStyle(hasPhoto ? Color(red: 0.35, green: 0.6, blue: 0.4) : Color.appForeground)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.appSecondaryBackground)
-                    .clipShape(Rectangle())
                 }
 
                 Button(action: {
@@ -1419,6 +1491,64 @@ struct AnalyticsView: View {
             let filtered = artifacts.filter { range.contains($0.motivationLevel ?? 0) }
             let average = filtered.isEmpty ? 0.0 : filtered.map { $0.score }.reduce(0, +) / Double(filtered.count)
             return MotivationCorrelation(levelLabel: label, averageScore: average)
+        }
+    }
+}
+
+struct PhotoScrollView: View {
+    let images: [UIImage]
+    var onAdd: () -> Void
+    var onDelete: (Int) -> Void
+    var onSelect: (Int) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                ForEach(Array(images.enumerated()), id: \.offset) { index, image in
+                    ZStack(alignment: .topTrailing) {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 80, height: 80)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                onSelect(index)
+                            }
+
+                        Button {
+                            onDelete(index)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundStyle(.white, Color.black.opacity(0.4))
+                        }
+                        .padding(4)
+                    }
+                }
+
+                Button {
+                    onAdd()
+                } label: {
+                    VStack(spacing: 6) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(Color.appForeground)
+                        Text("Add photo")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(Color.appMutedForeground)
+                    }
+                    .frame(width: 80, height: 80)
+                    .background(Color.appSecondaryBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Color.appMutedForeground.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4]))
+                    )
+                }
+            }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 4)
         }
     }
 }

@@ -18,7 +18,8 @@ struct SessionReportView: View {
     let artifact: SessionArtifact
     var beforeImage: UIImage? = nil
     var afterImage: UIImage? = nil
-    var progressPhotos: [Int: UIImage] = [:]
+    var afterImages: [UIImage] = []
+    var progressPhotos: [Int: [UIImage]] = [:]
     var comparison: String = ""
     var session: SessionEngine? = nil
     var onDismiss: () -> Void
@@ -34,13 +35,19 @@ struct SessionReportView: View {
         }
         let sortedLoops = progressPhotos.keys.sorted()
         for loop in sortedLoops {
-            if let img = progressPhotos[loop] {
-                let label = (loop == loops.count) ? "Loop \(loop) (After)" : "Loop \(loop)"
-                list.append(ReportPhoto(label: label, image: img))
+            if let imgs = progressPhotos[loop] {
+                for (idx, img) in imgs.enumerated() {
+                    let suffix = imgs.count > 1 ? " (\(idx + 1)/\(imgs.count))" : ""
+                    let label = "Loop \(loop)\(suffix)"
+                    list.append(ReportPhoto(label: label, image: img))
+                }
             }
         }
-        if let afterImage, !list.contains(where: { $0.image == afterImage }) {
-            list.append(ReportPhoto(label: "After", image: afterImage))
+        let finalImages = !afterImages.isEmpty ? afterImages : (afterImage != nil ? [afterImage!] : [])
+        for (idx, img) in finalImages.enumerated() {
+            let suffix = finalImages.count > 1 ? " (\(idx + 1)/\(finalImages.count))" : ""
+            let label = "After\(suffix)"
+            list.append(ReportPhoto(label: label, image: img))
         }
         return list
     }
@@ -53,7 +60,7 @@ struct SessionReportView: View {
                 VStack(alignment: .leading, spacing: 32) {
                     header
                     if artifact.totalDurationWorked != nil { timeWorkedSection }
-                    if beforeImage != nil || afterImage != nil { comparisonSection }
+                    if beforeImage != nil || afterImage != nil || !afterImages.isEmpty { comparisonSection }
                     progressRatingSelector
                     if loops.contains(where: { $0.score > 0 }) { scores }
                     if !artifact.finalAnswers.isEmpty { answersSection }
@@ -251,17 +258,25 @@ struct SessionReportView: View {
                 HStack {
                     Spacer()
                     Button(action: { session?.toggleReflectionRecording() }) {
-                        Image(systemName: session?.isRecording == true ? "stop.fill" : "mic.fill")
-                            .font(.system(size: 17))
-                            .foregroundStyle(session?.isRecording == true ? .white : Color.primary)
-                            .frame(width: 44, height: 44)
-                            .background(
-                                session?.isRecording == true
-                                    ? Color.red
-                                    : Color(.tertiarySystemBackground)
-                            )
-                            .clipShape(Circle())
+                        Group {
+                            if session?.isVoiceLoading == true {
+                                ProgressView()
+                                    .scaleEffect(0.9)
+                            } else {
+                                Image(systemName: session?.isRecording == true ? "stop.fill" : "mic.fill")
+                                    .font(.system(size: 17))
+                                    .foregroundStyle(session?.isRecording == true ? .white : Color.primary)
+                            }
+                        }
+                        .frame(width: 44, height: 44)
+                        .background(
+                            session?.isRecording == true
+                                ? Color.red
+                                : Color(.tertiarySystemBackground)
+                        )
+                        .clipShape(Circle())
                     }
+                    .disabled(session?.isVoiceLoading == true)
                     .padding(.trailing, 12)
                     .padding(.bottom, 12)
                 }
