@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ScoreSelector: View {
     var onSelect: (Int) -> Void
@@ -6,6 +7,7 @@ struct ScoreSelector: View {
 
     @State private var selected: Int? = nil
     @State private var submitted = false
+    private let haptic = UISelectionFeedbackGenerator()
 
     var body: some View {
         VStack(spacing: 36) {
@@ -25,8 +27,9 @@ struct ScoreSelector: View {
                                 .strokeBorder(Color.primary.opacity(filled ? 0 : 0.28), lineWidth: 1.5)
                         )
                         .frame(width: 38, height: 38)
-                        .scaleEffect(selected == i ? 1.18 : 1.0)
-                        .animation(.spring(response: 0.25, dampingFraction: 0.6), value: selected)
+                        .scaleEffect(scale(for: i))
+                        .opacity(opacity(for: i))
+                        .animation(.bouncySpring, value: selected)
                         .onTapGesture {
                             guard !submitted else { return }
                             tap(i)
@@ -46,17 +49,28 @@ struct ScoreSelector: View {
                         .multilineTextAlignment(.center)
                 }
                 .transition(.opacity.combined(with: .scale(scale: 0.88)))
-                .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selected)
+                .animation(.bouncySpring, value: selected)
             }
         }
     }
 
     private func tap(_ i: Int) {
-        withAnimation(.spring(response: 0.25, dampingFraction: 0.6)) {
+        haptic.selectionChanged()
+        withAnimation(.bouncySpring) {
             selected = i
         }
         submitted = true
         onSelect(i)
+    }
+
+    private func scale(for i: Int) -> CGFloat {
+        guard let selected else { return 1.0 }
+        return selected == i ? 1.25 : 0.9
+    }
+
+    private func opacity(for i: Int) -> Double {
+        guard let selected else { return 1.0 }
+        return selected == i ? 1.0 : 0.45
     }
 
     private func label(_ score: Int) -> String {

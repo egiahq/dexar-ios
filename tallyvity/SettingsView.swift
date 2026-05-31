@@ -63,6 +63,7 @@ struct SettingsView: View {
                     .onSubmit { saveName() }
                 Button("Save") { saveName() }
                     .font(.caption.weight(.medium))
+                    .buttonStyle(SpringButtonStyle())
             } else {
                 Text(settings.userName.isEmpty ? "Not set" : settings.userName)
                     .foregroundStyle(.secondary)
@@ -71,6 +72,7 @@ struct SettingsView: View {
                     editingName = true
                 }
                 .font(.caption.weight(.medium))
+                .buttonStyle(SpringButtonStyle())
             }
         }
     }
@@ -98,6 +100,7 @@ struct SettingsView: View {
                     .padding(.vertical, 6)
                     .background(Color.appPrimary)
                     .clipShape(Rectangle())
+                    .buttonStyle(SpringButtonStyle())
             } else {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
@@ -128,6 +131,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .buttonStyle(SpringButtonStyle())
     }
 
     private func saveName() {

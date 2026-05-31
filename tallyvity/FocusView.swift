@@ -27,7 +27,10 @@ struct FocusView: View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
             phaseContent
+                .id(session.phase)
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
         }
+        .animation(.snappySpring, value: session.phase)
         .overlay(alignment: .topLeading) {
             if session.phase != .idle && session.phase != .sessionReport {
                 Button(action: {
@@ -42,6 +45,7 @@ struct FocusView: View {
                                 .fill(Color.red.opacity(0.08))
                         )
                 }
+                .buttonStyle(SpringButtonStyle())
                 .padding(.leading, 24)
                 .padding(.top, 16)
                 .transition(.opacity)
@@ -209,12 +213,14 @@ struct FocusView: View {
                             .font(.system(size: 20, weight: .light))
                             .foregroundStyle(.secondary)
                     }
+                    .buttonStyle(SpringButtonStyle())
 
                     Button(action: { showAnalytics = true }) {
                         Image(systemName: "chart.bar")
                             .font(.system(size: 20, weight: .light))
                             .foregroundStyle(.secondary)
                     }
+                    .buttonStyle(SpringButtonStyle())
                 }
 
                 Spacer()
@@ -224,6 +230,7 @@ struct FocusView: View {
                         .font(.system(size: 20, weight: .light))
                         .foregroundStyle(.secondary)
                 }
+                .buttonStyle(SpringButtonStyle())
             }
             .padding(.horizontal, 28)
             .padding(.top, 16)
@@ -274,7 +281,7 @@ struct FocusView: View {
             .background(Color.appSecondaryBackground)
             .clipShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(SpringButtonStyle())
     }
 
     private var timePickers: some View {
@@ -348,6 +355,7 @@ struct FocusView: View {
                 .background(Color.appSecondaryBackground)
                 .clipShape(Rectangle())
         }
+        .buttonStyle(SpringButtonStyle())
         .padding(.horizontal, 40)
     }
 
@@ -376,6 +384,13 @@ struct FocusView: View {
         ZStack {
             Color.appBackground.ignoresSafeArea()
 
+            TimerRingView(
+                progress: session.timerProgress,
+                isWork: true,
+                remainingTime: session.remainingTime
+            )
+            .frame(width: 280, height: 280)
+
             VStack(spacing: 0) {
                 loopDots(current: loopNumber)
                     .padding(.top, 60)
@@ -388,15 +403,6 @@ struct FocusView: View {
                         .padding(.horizontal, 36)
                         .padding(.top, 24)
                 }
-
-                Spacer()
-
-                TimerRingView(
-                    progress: session.timerProgress,
-                    isWork: true,
-                    remainingTime: session.remainingTime
-                )
-                .frame(width: 280, height: 280)
 
                 Spacer()
 
@@ -435,6 +441,13 @@ struct FocusView: View {
         ZStack {
             breakAmbientBackground
 
+            TimerRingView(
+                progress: session.timerProgress,
+                isWork: false,
+                remainingTime: session.remainingTime
+            )
+            .frame(width: 280, height: 280)
+
             VStack(spacing: 0) {
                 loopDots(current: loopNumber)
                     .padding(.top, 60)
@@ -447,20 +460,6 @@ struct FocusView: View {
                         .padding(.horizontal, 36)
                         .padding(.top, 24)
                 }
-
-                Spacer()
-
-                TimerRingView(
-                    progress: session.timerProgress,
-                    isWork: false,
-                    remainingTime: session.remainingTime
-                )
-                .frame(width: 280, height: 280)
-
-                Text("Rest")
-                    .font(.system(size: 15, weight: .light))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 20)
 
                 Spacer()
 
@@ -522,7 +521,7 @@ struct FocusView: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
-        .animation(.easeOut(duration: 0.5), value: loopNumber)
+        .animation(.snappySpring, value: loopNumber)
     }
 
     private func sessionControls(canSkip: Bool) -> some View {
@@ -533,18 +532,21 @@ struct FocusView: View {
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
+                .buttonStyle(SpringButtonStyle())
             } else if session.phase == .motivationSelection {
                 Button(action: session.backToGoalCapture) {
                     Text("Back")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
+                .buttonStyle(SpringButtonStyle())
             } else {
                 Button(action: { showEndAlert = true }) {
                     Text("End")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
+                .buttonStyle(SpringButtonStyle())
             }
 
             if canSkip {
@@ -553,6 +555,7 @@ struct FocusView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                .buttonStyle(SpringButtonStyle())
             }
         }
     }
@@ -606,6 +609,7 @@ struct FocusView: View {
                     .background(Color.appSecondaryBackground)
                     .clipShape(Rectangle())
                 }
+                .buttonStyle(SpringButtonStyle())
                 .disabled(session.isVoiceLoading || (session.isProcessingSpeech && !session.isRecording))
             }
 
@@ -632,7 +636,7 @@ struct FocusView: View {
                                         .background(Color.appSecondaryBackground)
                                         .clipShape(Rectangle())
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(SpringButtonStyle())
                             }
                         }
                         .padding(.horizontal, 24)
@@ -656,6 +660,7 @@ struct FocusView: View {
                         .background(Color.appSecondaryBackground)
                         .clipShape(Rectangle())
                 }
+                .buttonStyle(SpringButtonStyle())
                 .transition(.opacity)
                 .padding(.bottom, 24)
             }
@@ -734,6 +739,7 @@ struct FocusView: View {
                             .background(Color.appSecondaryBackground)
                             .clipShape(Rectangle())
                     }
+                    .buttonStyle(SpringButtonStyle())
                 } else {
                     Button(action: { showCamera = true }) {
                         Label("Take Photo", systemImage: "camera")
@@ -744,6 +750,7 @@ struct FocusView: View {
                             .background(Color.appSecondaryBackground)
                             .clipShape(Rectangle())
                     }
+                    .buttonStyle(SpringButtonStyle())
 
                     Button(action: session.skipPhoto) {
                         Text("Skip")
@@ -754,6 +761,7 @@ struct FocusView: View {
                             .background(Color.appTertiaryBackground)
                             .clipShape(Rectangle())
                     }
+                    .buttonStyle(SpringButtonStyle())
                 }
 
                 if isBaseline {
@@ -765,6 +773,7 @@ struct FocusView: View {
                             .padding(.vertical, 16)
                             .clipShape(Rectangle())
                     }
+                    .buttonStyle(SpringButtonStyle())
                 }
             }
             .padding(.horizontal, 40)
@@ -840,6 +849,7 @@ struct FocusView: View {
                         .background(Color.appSecondaryBackground)
                         .clipShape(Rectangle())
                     }
+                    .buttonStyle(SpringButtonStyle())
                 }
 
                 Button(action: {
@@ -853,6 +863,7 @@ struct FocusView: View {
                         .background(Color.appDestructive.opacity(0.08))
                         .clipShape(Rectangle())
                 }
+                .buttonStyle(SpringButtonStyle())
 
                 Button(action: {
                     session.selectRoundEndAction(.startBreak)
@@ -865,6 +876,7 @@ struct FocusView: View {
                         .background(Color(red: 0.3, green: 0.55, blue: 0.38).opacity(0.1))
                         .clipShape(Rectangle())
                 }
+                .buttonStyle(SpringButtonStyle())
             }
             .padding(.horizontal, 40)
             .padding(.bottom, 48)
@@ -971,6 +983,7 @@ struct SessionReadyView: View {
                     .background(Color.appSecondaryBackground)
                     .clipShape(Rectangle())
             }
+            .buttonStyle(SpringButtonStyle())
             .padding(.horizontal, 40)
             .padding(.bottom, 16)
 
@@ -979,6 +992,7 @@ struct SessionReadyView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
+            .buttonStyle(SpringButtonStyle())
             .padding(.bottom, 48)
         }
         .onAppear { goalText = session.currentGoal }
@@ -1523,6 +1537,7 @@ struct PhotoScrollView: View {
                                 .font(.system(size: 18))
                                 .foregroundStyle(.white, Color.black.opacity(0.4))
                         }
+                        .buttonStyle(SpringButtonStyle())
                         .padding(4)
                     }
                 }
@@ -1546,6 +1561,7 @@ struct PhotoScrollView: View {
                             .strokeBorder(Color.appMutedForeground.opacity(0.25), style: StrokeStyle(lineWidth: 1, dash: [4]))
                     )
                 }
+                .buttonStyle(SpringButtonStyle())
             }
             .padding(.horizontal, 2)
             .padding(.vertical, 4)

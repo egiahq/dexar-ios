@@ -30,14 +30,14 @@ struct RootView: View {
                     }
                     session = SessionEngine(speech: speech, gemma: gemma)
                 }
-                .transition(.opacity)
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
             } else if let session {
                 FocusView(session: session, gemma: gemma, settings: settings)
-                    .transition(.opacity)
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
             }
         }
-        .animation(.easeInOut(duration: 0.4), value: isBooting)
-        .animation(.easeInOut(duration: 0.4), value: settings.onboardingComplete)
+        .animation(.snappySpring, value: isBooting)
+        .animation(.snappySpring, value: settings.onboardingComplete)
         .task {
             if settings.onboardingComplete {
                 await speech.requestPermissionAndLoad(settings: settings)

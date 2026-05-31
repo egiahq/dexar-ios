@@ -26,7 +26,7 @@ final class SessionEngine {
         case workAgain
     }
 
-    enum Phase: Equatable {
+    enum Phase: Hashable {
         case idle
         case motivationSelection
         case preparingAudio
@@ -268,8 +268,11 @@ final class SessionEngine {
         let loopDurations = completedLoops.map { $0.duration ?? 0.0 }
         let goalText = currentGoal.isEmpty ? "Focus session" : currentGoal
 
+        let artifactId = UUID().uuidString
+        let photoInfo = persistSessionPhotos(forArtifactId: artifactId)
+
         let artifact = SessionArtifact(
-            id: UUID().uuidString,
+            id: artifactId,
             date: Date(),
             goal: goalText,
             motivationLevel: sessionMotivationLevel,
@@ -281,7 +284,10 @@ final class SessionEngine {
             finalAnswers: [],
             totalDurationWorked: totalDuration,
             loopDurations: loopDurations,
-            totalLoops: totalLoops
+            totalLoops: totalLoops,
+            baselinePhotoPath: photoInfo.baseline,
+            finalPhotoPaths: photoInfo.final,
+            progressPhotoPaths: photoInfo.progress
         )
 
         store.save(artifact)
@@ -411,7 +417,66 @@ final class SessionEngine {
     func clearPhotosDirectory() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let dir = docs.appendingPathComponent("photos", isDirectory: true)
-        try? FileManager.default.removeItem(at: dir)
+        guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
+        for file in files {
+            let name = file.lastPathComponent
+            if name.hasPrefix("baseline_photo") || name.hasPrefix("final_photo") || name.hasPrefix("progress_photo") {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+    }
+
+    private func persistSessionPhotos(forArtifactId id: String) -> (baseline: String?, final: [String]?, progress: [String: [String]]?) {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("photos", isDirectory: true)
+        
+        var baselinePath: String? = nil
+        var finalPaths: [String] = []
+        var progressPaths: [String: [String]] = [:]
+        
+        let baselineTemp = dir.appendingPathComponent("baseline_photo.jpg")
+        if FileManager.default.fileExists(atPath: baselineTemp.path) {
+            let name = "\(id)_baseline.jpg"
+            let baselineDest = dir.appendingPathComponent(name)
+            try? FileManager.default.copyItem(at: baselineTemp, to: baselineDest)
+            baselinePath = name
+        }
+        
+        for loop in progressPhotos.keys {
+            if let imgs = progressPhotos[loop] {
+                var loopPaths: [String] = []
+                for idx in 0..<imgs.count {
+                    let tempName = "progress_photo_\(loop)_\(idx).jpg"
+                    let tempURL = dir.appendingPathComponent(tempName)
+                    if FileManager.default.fileExists(atPath: tempURL.path) {
+                        let permName = "\(id)_progress_\(loop)_\(idx).jpg"
+                        let permURL = dir.appendingPathComponent(permName)
+                        try? FileManager.default.copyItem(at: tempURL, to: permURL)
+                        loopPaths.append(permName)
+                    }
+                }
+                if !loopPaths.isEmpty {
+                    progressPaths[String(loop)] = loopPaths
+                }
+            }
+        }
+        
+        for idx in 0..<finalPhotos.count {
+            let tempName = "final_photo_\(idx).jpg"
+            let tempURL = dir.appendingPathComponent(tempName)
+            if FileManager.default.fileExists(atPath: tempURL.path) {
+                let permName = "\(id)_final_\(idx).jpg"
+                let permURL = dir.appendingPathComponent(permName)
+                try? FileManager.default.copyItem(at: tempURL, to: permURL)
+                finalPaths.append(permName)
+            }
+        }
+        
+        return (
+            baselinePath,
+            finalPaths.isEmpty ? nil : finalPaths,
+            progressPaths.isEmpty ? nil : progressPaths
+        )
     }
 
     func skipPhoto() {
@@ -963,8 +1028,11 @@ final class SessionEngine {
             let totalDuration = completedLoops.reduce(0.0) { $0 + ($1.duration ?? 0.0) }
             let loopDurations = completedLoops.map { $0.duration ?? 0.0 }
 
+            let artifactId = UUID().uuidString
+            let photoInfo = persistSessionPhotos(forArtifactId: artifactId)
+
             let artifact = SessionArtifact(
-                id: UUID().uuidString,
+                id: artifactId,
                 date: Date(),
                 goal: currentGoal,
                 motivationLevel: sessionMotivationLevel,
@@ -976,7 +1044,10 @@ final class SessionEngine {
                 finalAnswers: finalAnswers,
                 totalDurationWorked: totalDuration,
                 loopDurations: loopDurations,
-                totalLoops: totalLoops
+                totalLoops: totalLoops,
+                baselinePhotoPath: photoInfo.baseline,
+                finalPhotoPaths: photoInfo.final,
+                progressPhotoPaths: photoInfo.progress
             )
             
             // Save in background

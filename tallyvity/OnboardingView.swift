@@ -34,8 +34,10 @@ struct OnboardingView: View {
                 Spacer()
             }
             .padding(.horizontal, 40)
+            .id(step)
+            .transition(.opacity.combined(with: .scale(scale: 0.95)))
         }
-        .animation(.easeInOut(duration: 0.4), value: step)
+        .animation(.snappySpring, value: step)
     }
 
     private var introContent: some View {
@@ -70,6 +72,7 @@ struct OnboardingView: View {
                     .background(Color.appSecondaryBackground)
                     .clipShape(Rectangle())
             }
+            .buttonStyle(SpringButtonStyle())
         }
     }
 
@@ -138,6 +141,7 @@ struct OnboardingView: View {
                     .background(Color.appSecondaryBackground)
                     .clipShape(Rectangle())
             }
+            .buttonStyle(SpringButtonStyle())
             .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
         }
         .onAppear { fieldFocused = true }

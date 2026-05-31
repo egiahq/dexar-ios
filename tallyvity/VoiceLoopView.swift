@@ -90,8 +90,9 @@ struct VoiceLoopView: View {
                     }
                 }
                 .scaleEffect(engine.state == .recording ? 1.15 : 1.0)
-                .animation(.spring(response: 0.3), value: engine.state == .recording)
+                .animation(.snappySpring, value: engine.state == .recording)
         }
+        .buttonStyle(SpringButtonStyle())
         .disabled(!engine.state.allowsInteraction)
     }
 
@@ -113,6 +114,7 @@ struct VoiceLoopView: View {
                 .padding(.vertical, 12)
                 .background(Color.appPrimary)
                 .clipShape(Rectangle())
+                .buttonStyle(SpringButtonStyle())
         }
         .padding(32)
     }

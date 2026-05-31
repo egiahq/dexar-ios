@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RotaryTimePicker: View {
     @Binding var value: Int
@@ -8,7 +9,9 @@ struct RotaryTimePicker: View {
     let unit: String
 
     @State private var dragOffset: CGFloat = 0
+    @State private var activeDragIndex: Int? = nil
     private let itemHeight: CGFloat = 50
+    private let hapticFeedback = UISelectionFeedbackGenerator()
 
     init(value: Binding<Int>, values: [Int], label: String, unit: String = "min") {
         self._value = value
@@ -52,7 +55,7 @@ struct RotaryTimePicker: View {
                             .opacity(dist < 3 ? opacity(dist: dist) : 0)
                             .scaleEffect(y: perspective(dist: dist))
                             .offset(y: relPos)
-                            .animation(.interactiveSpring(), value: dragOffset)
+                            .animation(.interactiveSpring(response: 0.15, dampingFraction: 0.86, blendDuration: 0.25), value: dragOffset)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -65,6 +68,12 @@ struct RotaryTimePicker: View {
                 DragGesture(minimumDistance: 2)
                     .onChanged { v in
                         dragOffset = v.translation.height
+                        let steps = Int((-dragOffset / itemHeight).rounded())
+                        let index = max(0, min(values.count - 1, selectedIndex + steps))
+                        if activeDragIndex != index {
+                            activeDragIndex = index
+                            hapticFeedback.selectionChanged()
+                        }
                     }
                     .onEnded { v in
                         let steps = Int((-v.translation.height / itemHeight).rounded())
@@ -73,6 +82,7 @@ struct RotaryTimePicker: View {
                             value = values[newIdx]
                             dragOffset = 0
                         }
+                        activeDragIndex = nil
                     }
             )
 

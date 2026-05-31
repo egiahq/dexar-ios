@@ -124,6 +124,7 @@ struct LLMDemoView: View {
                                 .foregroundStyle(.white)
                                 .background(Circle().fill(Color.black.opacity(0.5)))
                         }
+                        .buttonStyle(SpringButtonStyle())
                         .offset(x: 6, y: -6)
                     }
                     Spacer()
@@ -140,12 +141,14 @@ struct LLMDemoView: View {
                         .font(.system(size: 20))
                         .foregroundStyle(.secondary)
                 }
+                .buttonStyle(SpringButtonStyle())
 
                 PhotosPicker(selection: $pickerItem, matching: .images) {
                     Image(systemName: pendingImage == nil ? "photo" : "photo.fill")
                         .font(.system(size: 20))
                         .foregroundStyle(pendingImage == nil ? .secondary : .primary)
                 }
+                .buttonStyle(SpringButtonStyle())
 
                 TextField("Ask anything…", text: $prompt, axis: .vertical)
                     .lineLimit(1...4)
@@ -156,6 +159,7 @@ struct LLMDemoView: View {
                         .font(.system(size: 28))
                         .foregroundStyle(canSend ? Color.appForeground : Color.appMutedForeground.opacity(0.3))
                 }
+                .buttonStyle(SpringButtonStyle())
                 .disabled(!canSend)
             }
             .padding(.horizontal, 16)
@@ -180,6 +184,7 @@ struct LLMDemoView: View {
                 .padding(.vertical, 12)
                 .background(Color.appPrimary)
                 .clipShape(Rectangle())
+                .buttonStyle(SpringButtonStyle())
         }
     }
 

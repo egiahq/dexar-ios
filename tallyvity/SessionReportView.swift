@@ -27,15 +27,19 @@ struct SessionReportView: View {
     @State private var photoGallery: PhotoGallery? = nil
     @State private var progressRating: Int?
     @State private var reflectionText: String = ""
+    @State private var beforeImageLoaded: UIImage? = nil
+    @State private var afterImagesLoaded: [UIImage] = []
+    @State private var progressPhotosLoaded: [Int: [UIImage]] = [:]
+    private let haptic = UISelectionFeedbackGenerator()
 
     private var allPhotos: [ReportPhoto] {
         var list: [ReportPhoto] = []
-        if let beforeImage {
-            list.append(ReportPhoto(label: "Before", image: beforeImage))
+        if let beforeImageLoaded {
+            list.append(ReportPhoto(label: "Before", image: beforeImageLoaded))
         }
-        let sortedLoops = progressPhotos.keys.sorted()
+        let sortedLoops = progressPhotosLoaded.keys.sorted()
         for loop in sortedLoops {
-            if let imgs = progressPhotos[loop] {
+            if let imgs = progressPhotosLoaded[loop] {
                 for (idx, img) in imgs.enumerated() {
                     let suffix = imgs.count > 1 ? " (\(idx + 1)/\(imgs.count))" : ""
                     let label = "Loop \(loop)\(suffix)"
@@ -43,9 +47,8 @@ struct SessionReportView: View {
                 }
             }
         }
-        let finalImages = !afterImages.isEmpty ? afterImages : (afterImage != nil ? [afterImage!] : [])
-        for (idx, img) in finalImages.enumerated() {
-            let suffix = finalImages.count > 1 ? " (\(idx + 1)/\(finalImages.count))" : ""
+        for (idx, img) in afterImagesLoaded.enumerated() {
+            let suffix = afterImagesLoaded.count > 1 ? " (\(idx + 1)/\(afterImagesLoaded.count))" : ""
             let label = "After\(suffix)"
             list.append(ReportPhoto(label: label, image: img))
         }
@@ -60,7 +63,7 @@ struct SessionReportView: View {
                 VStack(alignment: .leading, spacing: 32) {
                     header
                     if artifact.totalDurationWorked != nil { timeWorkedSection }
-                    if beforeImage != nil || afterImage != nil || !afterImages.isEmpty { comparisonSection }
+                    if beforeImageLoaded != nil || !afterImagesLoaded.isEmpty || !progressPhotosLoaded.isEmpty { comparisonSection }
                     progressRatingSelector
                     if loops.contains(where: { $0.score > 0 }) { scores }
                     if !artifact.finalAnswers.isEmpty { answersSection }
@@ -79,6 +82,30 @@ struct SessionReportView: View {
         .onAppear {
             progressRating = artifact.progressRating
             reflectionText = artifact.reflection ?? ""
+
+            if let baselineName = artifact.baselinePhotoPath {
+                beforeImageLoaded = loadPhotoFromDisk(name: baselineName)
+            } else {
+                beforeImageLoaded = beforeImage
+            }
+            
+            if let finalNames = artifact.finalPhotoPaths {
+                afterImagesLoaded = finalNames.compactMap { loadPhotoFromDisk(name: $0) }
+            } else {
+                afterImagesLoaded = afterImages.isEmpty && afterImage != nil ? [afterImage!] : afterImages
+            }
+            
+            if let progressMap = artifact.progressPhotoPaths {
+                var loadedMap: [Int: [UIImage]] = [:]
+                for (loopStr, paths) in progressMap {
+                    if let loopInt = Int(loopStr) {
+                        loadedMap[loopInt] = paths.compactMap { loadPhotoFromDisk(name: $0) }
+                    }
+                }
+                progressPhotosLoaded = loadedMap
+            } else {
+                progressPhotosLoaded = progressPhotos
+            }
         }
         .onChange(of: reflectionText) { _, new in
             var updated = artifact
@@ -122,11 +149,13 @@ struct SessionReportView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
                     ForEach(Array(allPhotos.enumerated()), id: \.element.id) { idx, reportPhoto in
-                        photoTile(label: reportPhoto.label, image: reportPhoto.image)
-                            .frame(width: 140)
-                            .onTapGesture {
-                                photoGallery = PhotoGallery(photos: allPhotos, initialIndex: idx)
-                            }
+                        Button(action: {
+                            photoGallery = PhotoGallery(photos: allPhotos, initialIndex: idx)
+                        }) {
+                            photoTile(label: reportPhoto.label, image: reportPhoto.image)
+                                .frame(width: 140)
+                        }
+                        .buttonStyle(SpringButtonStyle())
                     }
                 }
             }
@@ -276,6 +305,7 @@ struct SessionReportView: View {
                         )
                         .clipShape(Circle())
                     }
+                    .buttonStyle(SpringButtonStyle())
                     .disabled(session?.isVoiceLoading == true)
                     .padding(.trailing, 12)
                     .padding(.bottom, 12)
@@ -296,6 +326,7 @@ struct SessionReportView: View {
                 .background(Color.appSecondaryBackground)
                 .clipShape(Rectangle())
         }
+        .buttonStyle(SpringButtonStyle())
         .padding(.top, 8)
     }
 
@@ -382,9 +413,10 @@ struct SessionReportView: View {
                         )
                         .frame(width: 38, height: 38)
                         .scaleEffect(progressScale(for: level))
+                        .opacity(progressOpacity(for: level))
                         .contentShape(Circle())
                         .onTapGesture {
-                            withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
+                            withAnimation(.bouncySpring) {
                                 selectProgressRating(level)
                             }
                         }
@@ -401,6 +433,7 @@ struct SessionReportView: View {
     }
 
     private func selectProgressRating(_ level: Int) {
+        haptic.selectionChanged()
         progressRating = level
         var updated = artifact
         updated.progressRating = level
@@ -414,7 +447,12 @@ struct SessionReportView: View {
 
     private func progressScale(for level: Int) -> CGFloat {
         guard let progressRating else { return 1.0 }
-        return progressRating == level ? 1.06 : 1.0
+        return progressRating == level ? 1.25 : 0.9
+    }
+
+    private func progressOpacity(for level: Int) -> Double {
+        guard let progressRating else { return 1.0 }
+        return progressRating == level ? 1.0 : 0.45
     }
 
     private func progressBorderColor(for level: Int) -> Color {
@@ -438,6 +476,16 @@ struct SessionReportView: View {
         f.dateStyle = .medium
         f.timeStyle = .none
         return f.string(from: artifact.date)
+    }
+
+    private func loadPhotoFromDisk(name: String) -> UIImage? {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("photos", isDirectory: true)
+        let fileURL = dir.appendingPathComponent(name)
+        if let data = try? Data(contentsOf: fileURL) {
+            return UIImage(data: data)
+        }
+        return nil
     }
 }
 

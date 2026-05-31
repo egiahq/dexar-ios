@@ -37,10 +37,20 @@ struct TimerRingView: View {
                         value: pulsing
                     )
 
-                Text(formattedTime)
-                    .font(.system(size: size * 0.17, weight: .light, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(isOvertime ? Color.appDestructive : .secondary)
+                VStack(spacing: 6) {
+                    if !isWork {
+                        Text("Rest")
+                            .font(.system(size: size * 0.05, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.tertiary)
+                            .textCase(.uppercase)
+                            .kerning(1.4)
+                    }
+
+                    Text(formattedTime)
+                        .font(.system(size: size * 0.17, weight: .light, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(isOvertime ? Color.appDestructive : .secondary)
+                }
             }
             .frame(width: size, height: size)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

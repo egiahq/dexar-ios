@@ -63,7 +63,7 @@ struct SessionHistoryView: View {
                                     .padding(.horizontal, 20)
                                     .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(SpringButtonStyle())
 
                             if idx < localArtifacts.count - 1 {
                                 Divider()
@@ -161,6 +161,7 @@ struct SessionHistoryView: View {
                         .background(Color.appTertiaryBackground)
                         .clipShape(Rectangle())
                 }
+                .buttonStyle(SpringButtonStyle())
 
                 Button(action: {
                     dismiss()
@@ -176,6 +177,7 @@ struct SessionHistoryView: View {
                         .background(Color.appPrimary)
                         .clipShape(Rectangle())
                 }
+                .buttonStyle(SpringButtonStyle())
             }
         }
         .padding(16)

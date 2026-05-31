@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct MotivationSelector: View {
     var onSelect: (Int) -> Void
@@ -7,6 +8,7 @@ struct MotivationSelector: View {
     @State private var selectedLevel: Int?
     @State private var submitted = false
     @State private var animationTask: Task<Void, Never>?
+    private let haptic = UISelectionFeedbackGenerator()
 
     var body: some View {
         VStack(spacing: 30) {
@@ -26,8 +28,9 @@ struct MotivationSelector: View {
                         )
                         .frame(width: 38, height: 38)
                         .scaleEffect(scale(for: level))
+                        .opacity(opacity(for: level))
                         .contentShape(Circle())
-                        .animation(.spring(response: 0.32, dampingFraction: 0.72), value: selectedLevel)
+                        .animation(.bouncySpring, value: selectedLevel)
                         .onTapGesture {
                             guard !submitted else { return }
                             onTapAdjust?()
@@ -50,8 +53,9 @@ struct MotivationSelector: View {
     }
 
     private func animateSelection(_ level: Int) {
+        haptic.selectionChanged()
         animationTask?.cancel()
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
+        withAnimation(.bouncySpring) {
             selectedLevel = level
         }
 
@@ -70,7 +74,12 @@ struct MotivationSelector: View {
 
     private func scale(for level: Int) -> CGFloat {
         guard let selectedLevel else { return 1.0 }
-        return selectedLevel == level ? 1.06 : 1.0
+        return selectedLevel == level ? 1.25 : 0.9
+    }
+
+    private func opacity(for level: Int) -> Double {
+        guard let selectedLevel else { return 1.0 }
+        return selectedLevel == level ? 1.0 : 0.45
     }
 
     private func borderColor(for level: Int) -> Color {

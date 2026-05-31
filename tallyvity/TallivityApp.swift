@@ -45,3 +45,17 @@ extension Color {
     static let appDestructive = Color(light: Color(hex: "#E7000B"), dark: Color(hex: "#FF6467"))
     static let appBorder = Color(light: Color(hex: "#E7E4E7"), dark: Color.white.opacity(0.1))
 }
+
+struct SpringButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .animation(.spring(response: 0.2, dampingFraction: 0.65), value: configuration.isPressed)
+    }
+}
+
+extension Animation {
+    static let snappySpring = Animation.spring(response: 0.35, dampingFraction: 0.82)
+    static let bouncySpring = Animation.spring(response: 0.38, dampingFraction: 0.65)
+    static let quickSpring = Animation.spring(response: 0.22, dampingFraction: 0.75)
+}

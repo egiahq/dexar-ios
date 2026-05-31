@@ -26,6 +26,9 @@ struct SessionArtifact: Codable, Identifiable {
     var onTaskSeconds: TimeInterval?
     var offTaskSeconds: TimeInterval?
     var reflection: String?
+    var baselinePhotoPath: String?
+    var finalPhotoPaths: [String]?
+    var progressPhotoPaths: [String: [String]]?
 }
 
 final class SessionStore {
