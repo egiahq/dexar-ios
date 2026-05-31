@@ -7,6 +7,12 @@ struct ReportPhoto: Identifiable {
     let image: UIImage
 }
 
+struct PhotoGallery: Identifiable {
+    let id = UUID()
+    let photos: [ReportPhoto]
+    let initialIndex: Int
+}
+
 struct SessionReportView: View {
     let loops: [LoopRecord]
     let artifact: SessionArtifact
@@ -14,10 +20,12 @@ struct SessionReportView: View {
     var afterImage: UIImage? = nil
     var progressPhotos: [Int: UIImage] = [:]
     var comparison: String = ""
+    var session: SessionEngine? = nil
     var onDismiss: () -> Void
 
-    @State private var selectedPhotoForEnlargement: ReportPhoto? = nil
+    @State private var photoGallery: PhotoGallery? = nil
     @State private var progressRating: Int?
+    @State private var reflectionText: String = ""
 
     private var allPhotos: [ReportPhoto] {
         var list: [ReportPhoto] = []
@@ -45,14 +53,12 @@ struct SessionReportView: View {
                 VStack(alignment: .leading, spacing: 32) {
                     header
                     if artifact.totalDurationWorked != nil { timeWorkedSection }
-                    progressRatingSelector
                     if beforeImage != nil || afterImage != nil { comparisonSection }
+                    progressRatingSelector
                     if loops.contains(where: { $0.score > 0 }) { scores }
                     if !artifact.finalAnswers.isEmpty { answersSection }
                     if let level = artifact.motivationLevel { motivationRow(level) }
-                    if !artifact.blocker.isEmpty { blockerRow }
-                    if !artifact.intentNext.isEmpty { nextRow }
-                    if !artifact.closingSentence.isEmpty { closing }
+                    reflectionSection
                     dismissButton
                 }
                 .padding(.horizontal, 28)
@@ -60,11 +66,23 @@ struct SessionReportView: View {
                 .padding(.bottom, 60)
             }
         }
-        .fullScreenCover(item: $selectedPhotoForEnlargement) { reportPhoto in
-            PhotoDetailView(image: reportPhoto.image, label: reportPhoto.label)
+        .fullScreenCover(item: $photoGallery) { gallery in
+            PhotoGalleryView(photos: gallery.photos, initialIndex: gallery.initialIndex)
         }
         .onAppear {
             progressRating = artifact.progressRating
+            reflectionText = artifact.reflection ?? ""
+        }
+        .onChange(of: reflectionText) { _, new in
+            var updated = artifact
+            updated.reflection = new.isEmpty ? nil : new
+            SessionStore.shared.save(updated)
+        }
+        .onChange(of: session?.reflectionTranscript ?? "") { _, new in
+            guard !new.isEmpty else { return }
+            withAnimation {
+                reflectionText = reflectionText.isEmpty ? new : reflectionText + " " + new
+            }
         }
     }
 
@@ -96,11 +114,11 @@ struct SessionReportView: View {
 
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 10) {
-                    ForEach(allPhotos) { reportPhoto in
+                    ForEach(Array(allPhotos.enumerated()), id: \.element.id) { idx, reportPhoto in
                         photoTile(label: reportPhoto.label, image: reportPhoto.image)
                             .frame(width: 140)
                             .onTapGesture {
-                                selectedPhotoForEnlargement = reportPhoto
+                                photoGallery = PhotoGallery(photos: allPhotos, initialIndex: idx)
                             }
                     }
                 }
@@ -114,7 +132,7 @@ struct SessionReportView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
                     .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .clipShape(Rectangle())
             }
         }
     }
@@ -131,9 +149,9 @@ struct SessionReportView: View {
                     .scaledToFill()
                     .frame(height: 140)
                     .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(Rectangle())
             } else {
-                RoundedRectangle(cornerRadius: 12)
+                Rectangle()
                     .fill(Color(.secondarySystemBackground))
                     .frame(height: 140)
                     .overlay(Text("—").foregroundStyle(.tertiary))
@@ -163,7 +181,7 @@ struct SessionReportView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
                     .background(Color(.secondarySystemBackground))
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .clipShape(Rectangle())
                 }
             }
         }
@@ -190,48 +208,67 @@ struct SessionReportView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
                 .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+                .clipShape(Rectangle())
             }
         }
     }
 
     @ViewBuilder
     private func motivationRow(_ level: Int) -> some View {
-        factRow(label: "Starting motivation", value: "\(level)/5")
-    }
-
-    @ViewBuilder
-    private var blockerRow: some View {
-        factRow(label: "Main friction", value: artifact.blocker)
-    }
-
-    @ViewBuilder
-    private var nextRow: some View {
-        factRow(label: "Next intent", value: artifact.intentNext)
-    }
-
-    private func factRow(label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(label)
+            Text("Starting motivation")
                 .font(.caption)
                 .kerning(1.2)
                 .foregroundStyle(.secondary)
                 .textCase(.uppercase)
-            Text(value)
+            Text("\(level)/5")
                 .font(.body)
                 .foregroundStyle(.primary)
         }
     }
 
-    private var closing: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Divider()
-            Text(artifact.closingSentence)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .lineSpacing(3)
-                .padding(.top, 4)
+    private var reflectionSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .topLeading) {
+                if reflectionText.isEmpty {
+                    Text("What went well, what slowed you down…")
+                        .font(.subheadline)
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 4)
+                        .padding(.top, 8)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $reflectionText)
+                    .font(.subheadline)
+                    .frame(minHeight: 96)
+                    .scrollContentBackground(.hidden)
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 4)
+
+            if session != nil {
+                HStack {
+                    Spacer()
+                    Button(action: { session?.toggleReflectionRecording() }) {
+                        Image(systemName: session?.isRecording == true ? "stop.fill" : "mic.fill")
+                            .font(.system(size: 17))
+                            .foregroundStyle(session?.isRecording == true ? .white : Color.primary)
+                            .frame(width: 44, height: 44)
+                            .background(
+                                session?.isRecording == true
+                                    ? Color.red
+                                    : Color(.tertiarySystemBackground)
+                            )
+                            .clipShape(Circle())
+                    }
+                    .padding(.trailing, 12)
+                    .padding(.bottom, 12)
+                }
+            }
         }
+        .background(Color(.secondarySystemBackground))
+        .clipShape(Rectangle())
     }
 
     private var dismissButton: some View {
@@ -295,7 +332,7 @@ struct SessionReportView: View {
                 }
                 .padding(14)
                 .background(Color(.secondarySystemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(Rectangle())
             }
         }
     }
@@ -439,37 +476,41 @@ struct ZoomableScrollView<Content: View>: UIViewRepresentable {
     }
 }
 
-struct PhotoDetailView: View {
-    let image: UIImage
-    let label: String
+struct PhotoGalleryView: View {
+    let photos: [ReportPhoto]
+    let initialIndex: Int
     @Environment(\.dismiss) private var dismiss
+    @State private var currentIndex: Int = 0
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            ZoomableScrollView {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
+            TabView(selection: $currentIndex) {
+                ForEach(Array(photos.enumerated()), id: \.element.id) { idx, photo in
+                    ZoomableScrollView {
+                        Image(uiImage: photo.image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    }
+                    .ignoresSafeArea()
+                    .tag(idx)
+                }
             }
+            .tabViewStyle(.page(indexDisplayMode: photos.count > 1 ? .always : .never))
             .ignoresSafeArea()
 
             VStack {
                 HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(label)
-                            .font(.headline)
-                            .foregroundStyle(.white)
-                    }
-                    .padding(.leading, 20)
-                    .padding(.top, 10)
+                    Text(photos.indices.contains(currentIndex) ? photos[currentIndex].label : "")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .padding(.leading, 20)
+                        .padding(.top, 10)
 
                     Spacer()
 
-                    Button {
-                        dismiss()
-                    } label: {
+                    Button { dismiss() } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.title2)
                             .foregroundStyle(.white.opacity(0.7))
@@ -482,12 +523,13 @@ struct PhotoDetailView: View {
             }
             .padding(.top, 10)
         }
+        .onAppear { currentIndex = initialIndex }
     }
 }
 
 #Preview {
     let loops = [
-        LoopRecord(goalText: "write report", answers: ["Finished intro", "Got distracted", "Start with outline"], score: 3, scoreReason: "three"),
+        LoopRecord(goalText: "write report", answers: ["Finished intro", "Got distracted", "Start with outline"], score: 3, scoreReason: "three"),        LoopRecord(goalText: "write report", answers: ["Finished intro", "Got distracted", "Start with outline"], score: 3, scoreReason: "three"),        LoopRecord(goalText: "write report", answers: ["Finished intro", "Got distracted", "Start with outline"], score: 3, scoreReason: "three"),        LoopRecord(goalText: "write report", answers: ["Finished intro", "Got distracted", "Start with outline"], score: 3, scoreReason: "three"),        LoopRecord(goalText: "write report", answers: ["Finished intro", "Got distracted", "Start with outline"], score: 3, scoreReason: "three"),        LoopRecord(goalText: "write report", answers: ["Finished intro", "Got distracted", "Start with outline"], score: 3, scoreReason: "three"),
         LoopRecord(goalText: "write report", answers: ["Finished section 2", "Coffee break too long", "Set a timer"], score: 4, scoreReason: "four")
     ]
     let artifact = SessionArtifact(

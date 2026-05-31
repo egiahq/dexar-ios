@@ -25,6 +25,7 @@ struct SessionArtifact: Codable, Identifiable {
     var totalLoops: Int?
     var onTaskSeconds: TimeInterval?
     var offTaskSeconds: TimeInterval?
+    var reflection: String?
 }
 
 final class SessionStore {

@@ -142,7 +142,7 @@ struct FocusView: View {
 
         case .goalCapture:
             captureView(
-                title: "Say your goal",
+                title: "Define your Task",
                 hint: "What are you working on?"
             )
 
@@ -182,6 +182,7 @@ struct FocusView: View {
                     afterImage: session.finalPhoto,
                     progressPhotos: session.progressPhotos,
                     comparison: session.comparisonText,
+                    session: session,
                     onDismiss: session.dismissReport
                 )
             }
@@ -239,23 +240,11 @@ struct FocusView: View {
             Spacer()
 
             VStack(spacing: 44) {
-                VStack(spacing: 12) {
-                    Text("Work past 30 days")
-                        .font(.system(size: 11, weight: .medium))
-                        .kerning(1.4)
-                        .foregroundStyle(.secondary)
-                        .textCase(.uppercase)
-
-                    activityGraph
-                }
-                .padding(.horizontal, 28)
-
                 timePickers
 
                 startButton
             }
 
-            // Spacer()
             Spacer()
         }
     }
@@ -297,7 +286,7 @@ struct FocusView: View {
 
                 RotaryTimePicker(
                     value: $breakMinutes,
-                    values: Array(stride(from: 5, through: 30, by: 1)),
+                    values: [0] + Array(stride(from: 5, through: 30, by: 1)),
                     label: "Break"
                 )
                 .frame(maxWidth: .infinity)
@@ -307,7 +296,7 @@ struct FocusView: View {
 
                 RotaryTimePicker(
                     value: $loopCount,
-                    values: Array(1...6),
+                    values: Array(0...6),
                     label: "Loops",
                     unit: "amount"
                 )
@@ -340,8 +329,9 @@ struct FocusView: View {
         Button(action: {
             session.workDuration = Double(focusMinutes) * 60
             session.shortBreakDuration = Double(breakMinutes) * 60
-            session.longBreakDuration = Double(breakMinutes * 4) * 60
+            session.longBreakDuration = breakMinutes > 0 ? Double(breakMinutes * 4) * 60 : 0
             session.totalLoops = loopCount
+            session.noBreak = breakMinutes == 0
             session.startSession(userName: settings.userName)
         }) {
             Text("Begin")
@@ -405,16 +395,24 @@ struct FocusView: View {
 
     @ViewBuilder
     private func loopDots(current: Int) -> some View {
-        let loops = max(1, session.totalLoops)
-        HStack(spacing: 8) {
-            ForEach(1...loops, id: \.self) { i in
-                Circle()
-                    .fill(i <= session.completedLoops.count
-                          ? Color(.label)
-                          : (i == current ? Color(.label).opacity(0.5) : Color(.systemGray5))
-                    )
-                    .frame(width: 6, height: 6)
+        if session.totalLoops > 0 {
+            let loops = session.totalLoops
+            HStack(spacing: 8) {
+                ForEach(1...loops, id: \.self) { i in
+                    Circle()
+                        .fill(i <= session.completedLoops.count
+                              ? Color(.label)
+                              : (i == current ? Color(.label).opacity(0.5) : Color(.systemGray5))
+                        )
+                        .frame(width: 6, height: 6)
+                }
             }
+        } else {
+            Text("Loop \(current)")
+                .font(.system(size: 11, weight: .medium))
+                .kerning(1.2)
+                .foregroundStyle(.tertiary)
+                .textCase(.uppercase)
         }
     }
 
@@ -545,9 +543,7 @@ struct FocusView: View {
 
             VStack(spacing: 28) {
                 Group {
-                    if session.isRecording {
-                        RecordingPulse()
-                    } else if session.isProcessingSpeech {
+                    if session.isProcessingSpeech {
                         ProgressView()
                     } else {
                         Color.clear.frame(height: 20)
@@ -572,9 +568,14 @@ struct FocusView: View {
                     session.toggleRecording()
                 }) {
                     HStack(spacing: 8) {
-                        Image(systemName: session.isRecording ? "stop.fill" : "mic.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text(session.isRecording ? "Stop Recording" : "Record Voice")
+                        if session.isVoiceLoading {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        } else {
+                            Image(systemName: session.isRecording ? "stop.fill" : "mic.fill")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        Text(session.isVoiceLoading ? "Loading Voice…" : session.isRecording ? "Stop Recording" : "Record Voice")
                             .font(.subheadline.weight(.semibold))
                     }
                     .foregroundStyle(session.isRecording ? Color.appDestructive : Color.appForeground)
@@ -583,7 +584,7 @@ struct FocusView: View {
                     .background(Color.appSecondaryBackground)
                     .clipShape(Rectangle())
                 }
-                .disabled(session.isProcessingSpeech && !session.isRecording)
+                .disabled(session.isVoiceLoading || (session.isProcessingSpeech && !session.isRecording))
             }
 
             let goals = priorGoals
@@ -694,12 +695,23 @@ struct FocusView: View {
 
                 Button(action: session.skipPhoto) {
                     Text("Skip")
-                        .font(.subheadline.weight(.medium))
+                        .font(.headline.weight(.medium))
                         .foregroundStyle(Color.appMutedForeground)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                        .padding(.vertical, 16)
                         .background(Color.appTertiaryBackground)
                         .clipShape(Rectangle())
+                }
+
+                if isBaseline {
+                    Button(action: session.backToGoal) {
+                        Text("Back")
+                            .font(.headline.weight(.medium))
+                            .foregroundStyle(Color.appMutedForeground.opacity(0.6))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 16)
+                            .clipShape(Rectangle())
+                    }
                 }
             }
             .padding(.horizontal, 40)
@@ -736,8 +748,8 @@ struct FocusView: View {
             Spacer()
 
             Text("Good.")
-                .font(.system(size: 22, weight: .light))
-                .foregroundStyle(.gray)
+                .font(.system(size: 28, weight: .regular))
+                .foregroundStyle(.primary.opacity(0.55))
 
             Spacer()
 
@@ -751,7 +763,7 @@ struct FocusView: View {
                         Text(hasPhoto ? "Photo captured" : "Take progress photo")
                     }
                     .font(.headline.weight(.medium))
-                    .foregroundStyle(hasPhoto ? .green : Color.appForeground)
+                    .foregroundStyle(hasPhoto ? Color(red: 0.35, green: 0.6, blue: 0.4) : Color.appForeground)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
                     .background(Color.appSecondaryBackground)
@@ -775,10 +787,10 @@ struct FocusView: View {
                 }) {
                     Text("Start break")
                         .font(.headline.weight(.medium))
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Color(red: 0.3, green: 0.55, blue: 0.38))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 16)
-                        .background(Color.blue.opacity(0.08))
+                        .background(Color(red: 0.3, green: 0.55, blue: 0.38).opacity(0.1))
                         .clipShape(Rectangle())
                 }
             }
@@ -804,67 +816,6 @@ struct FocusView: View {
         }
     }
 
-    private var past30Days: [Date] {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        return (0..<30).reversed().compactMap { dayOffset in
-            calendar.date(byAdding: .day, value: -dayOffset, to: today)
-        }
-    }
-
-    private func workDuration(forDate date: Date, artifacts: [SessionArtifact]) -> TimeInterval {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: date)
-        return artifacts
-            .filter { calendar.isDate($0.date, inSameDayAs: startOfDay) }
-            .compactMap { $0.totalDurationWorked }
-            .reduce(0, +)
-    }
-
-    private func cellColor(for duration: TimeInterval) -> Color {
-        if duration == 0 {
-            return Color(.systemGray6)
-        } else if duration < 600 {
-            return Color.purple.opacity(0.18)
-        } else if duration < 1500 {
-            return Color.purple.opacity(0.4)
-        } else if duration < 3000 {
-            return Color.purple.opacity(0.65)
-        } else {
-            return Color.purple
-        }
-    }
-
-    private var activityGraph: some View {
-        let days = past30Days
-        let allArtifacts = SessionStore.shared.loadAll()
-        
-        return HStack(spacing: 0) {
-            ForEach(0..<10, id: \.self) { col in
-                VStack(spacing: 6) {
-                    ForEach(0..<3, id: \.self) { row in
-                        let index = col * 3 + row
-                        if index < days.count {
-                            let date = days[index]
-                            let duration = workDuration(forDate: date, artifacts: allArtifacts)
-                            let isToday = Calendar.current.isDateInToday(date)
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(cellColor(for: duration))
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 3)
-                                        .stroke(Color.primary.opacity(0.35), lineWidth: isToday ? 1.2 : 0)
-                                )
-                                .frame(maxWidth: .infinity)
-                                .aspectRatio(1, contentMode: .fit)
-                        }
-                    }
-                }
-                if col < 9 {
-                    Spacer(minLength: 6)
-                }
-            }
-        }
-    }
 
     private var todayFocusSeconds: TimeInterval {
         let calendar = Calendar.current
@@ -916,47 +867,47 @@ struct SessionReadyView: View {
         VStack(spacing: 0) {
             Spacer()
 
-            VStack(spacing: 32) {
-                VStack(spacing: 16) {
-                    Text("Your goal")
-                        .font(.system(size: 11, weight: .medium))
-                        .kerning(1.6)
-                        .foregroundStyle(.tertiary)
-                        .textCase(.uppercase)
+            VStack(spacing: 16) {
+                Text("Your goal")
+                    .font(.system(size: 11, weight: .medium))
+                    .kerning(1.6)
+                    .foregroundStyle(.tertiary)
+                    .textCase(.uppercase)
 
-                    TextField("", text: $goalText, axis: .vertical)
-                        .font(.title2.weight(.light))
-                        .multilineTextAlignment(.center)
-                        .lineLimit(3)
-                        .padding(.horizontal, 40)
-                        .focused($fieldFocused)
-                        .onChange(of: goalText) { _, new in
-                            session.updateGoal(new)
-                        }
-                }
-
-                Button(action: {
-                    fieldFocused = false
-                    session.confirmStartSession()
-                }) {
-                    Text("Start Session")
-                        .font(.headline.weight(.medium))
-                        .foregroundStyle(Color.appForeground)
-                        .padding(.horizontal, 32)
-                        .padding(.vertical, 18)
-                        .background(Color.appSecondaryBackground)
-                        .clipShape(Rectangle())
-                }
+                TextField("", text: $goalText, axis: .vertical)
+                    .font(.title2.weight(.light))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(3)
+                    .padding(.horizontal, 40)
+                    .focused($fieldFocused)
+                    .onChange(of: goalText) { _, new in
+                        session.updateGoal(new)
+                    }
             }
 
             Spacer()
+
+            Button(action: {
+                fieldFocused = false
+                session.confirmStartSession()
+            }) {
+                Text("Start Session")
+                    .font(.headline.weight(.medium))
+                    .foregroundStyle(Color.appForeground)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.appSecondaryBackground)
+                    .clipShape(Rectangle())
+            }
+            .padding(.horizontal, 40)
+            .padding(.bottom, 16)
 
             Button(action: session.backToGoal) {
                 Text("← Record again")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
-            .padding(.bottom, 52)
+            .padding(.bottom, 48)
         }
         .onAppear { goalText = session.currentGoal }
     }
@@ -999,46 +950,67 @@ struct AnalyticsView: View {
 
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    totalFocusCard
-                } header: {
-                    sectionHeader("Overview")
-                }
-                .listRowBackground(Color.appSecondaryBackground)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        sectionHeader("Overview")
+                            .padding(.horizontal, 16)
+                        totalFocusCard
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(Color.appSecondaryBackground)
+                            .padding(.horizontal, 16)
+                    }
 
-                Section {
-                    weeklyTrendCard
-                } header: {
-                    sectionHeader("Weekly Trend")
-                }
-                .listRowBackground(Color.appSecondaryBackground)
+                    VStack(alignment: .leading, spacing: 8) {
+                        sectionHeader("Work Past 30 Days")
+                            .padding(.horizontal, 16)
+                        activityGraphCard
+                            .padding(.horizontal, 16)
+                    }
 
-                Section {
-                    focusHeatmapCard
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.appBackground)
-                } header: {
-                    sectionHeader("Focus Heatmap")
-                }
-                .listRowBackground(Color.appBackground)
+                    VStack(alignment: .leading, spacing: 8) {
+                        sectionHeader("Weekly Trend")
+                            .padding(.horizontal, 16)
+                        weeklyTrendCard
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(Color.appSecondaryBackground)
+                            .padding(.horizontal, 16)
+                    }
 
-                Section {
-                    peakHoursCard
-                } header: {
-                    sectionHeader("Peak Hours")
-                }
-                .listRowBackground(Color.appSecondaryBackground)
+                    VStack(alignment: .leading, spacing: 8) {
+                        sectionHeader("Focus Heatmap")
+                            .padding(.horizontal, 16)
+                        focusHeatmapCard
+                            .padding(.leading, 0)
+                            .padding(.trailing, 16)
+                    }
 
-                Section {
-                    motivationCorrelationCard
-                } header: {
-                    sectionHeader("Quality by Motivation")
+                    if !peakHours.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            sectionHeader("Peak Hours")
+                                .padding(.horizontal, 16)
+                            peakHoursCard
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .background(Color.appSecondaryBackground)
+                                .padding(.horizontal, 16)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        sectionHeader("Quality by Motivation")
+                            .padding(.horizontal, 16)
+                        motivationCorrelationCard
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 12)
+                            .background(Color.appSecondaryBackground)
+                            .padding(.horizontal, 16)
+                    }
                 }
-                .listRowBackground(Color.appSecondaryBackground)
+                .padding(.vertical, 16)
             }
-            .listStyle(.insetGrouped)
-            .scrollContentBackground(.hidden)
             .background(Color.appBackground)
             .navigationTitle("Analytics")
             .navigationBarTitleDisplayMode(.inline)
@@ -1057,6 +1029,82 @@ struct AnalyticsView: View {
             .foregroundStyle(.secondary)
             .textCase(.uppercase)
             .kerning(1.2)
+    }
+
+    // MARK: - Activity graph (past 30 days)
+
+    private var past30Days: [Date] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        return (0..<30).reversed().compactMap { calendar.date(byAdding: .day, value: -$0, to: today) }
+    }
+
+    private func workDuration(forDate date: Date) -> TimeInterval {
+        let calendar = Calendar.current
+        return artifacts
+            .filter { calendar.isDate($0.date, inSameDayAs: date) }
+            .compactMap { $0.totalDurationWorked }
+            .reduce(0, +)
+    }
+
+    private func activityCellColor(for duration: TimeInterval) -> Color {
+        switch duration {
+        case 0: return Color(.systemGray6)
+        case ..<600: return Color.purple.opacity(0.15)
+        case ..<1200: return Color.purple.opacity(0.28)
+        case ..<1800: return Color.purple.opacity(0.42)
+        case ..<2700: return Color.purple.opacity(0.56)
+        case ..<3600: return Color.purple.opacity(0.70)
+        case ..<5400: return Color.purple.opacity(0.84)
+        default: return Color.purple
+        }
+    }
+
+    private func activityCellTextColor(for duration: TimeInterval) -> Color {
+        if duration >= 2700 {
+            return .white
+        } else {
+            return .primary.opacity(0.85)
+        }
+    }
+
+    private var activityGraphCard: some View {
+        let days = past30Days
+        return HStack(spacing: 0) {
+            ForEach(0..<10, id: \.self) { col in
+                VStack(spacing: 6) {
+                    ForEach(0..<3, id: \.self) { row in
+                        let index = col * 3 + row
+                        if index < days.count {
+                            let date = days[index]
+                            let duration = workDuration(forDate: date)
+                            let minutes = Int(round(duration / 60.0))
+                            let isToday = Calendar.current.isDateInToday(date)
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(activityCellColor(for: duration))
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 3)
+                                            .stroke(Color.primary.opacity(0.35), lineWidth: isToday ? 1.2 : 0)
+                                    )
+                                if minutes > 0 {
+                                    Text("\(minutes)")
+                                        .font(.system(size: 7, weight: .semibold, design: .rounded))
+                                        .foregroundStyle(activityCellTextColor(for: duration))
+                                        .lineLimit(1)
+                                        .minimumScaleFactor(0.5)
+                                        .padding(.horizontal, 1)
+                                }
+                            }
+                            .frame(maxWidth: .infinity)
+                            .aspectRatio(1, contentMode: .fit)
+                        }
+                    }
+                }
+                if col < 9 { Spacer(minLength: 6) }
+            }
+        }
+        .padding(.vertical, 8)
     }
 
     // MARK: - Overview card
@@ -1102,7 +1150,7 @@ struct AnalyticsView: View {
                             .font(.system(size: 9, weight: .medium))
                             .foregroundStyle(Color.appForeground)
                         Rectangle()
-                            .fill(item.hours > 0 ? Color.appForeground : Color.appMutedForeground.opacity(0.15))
+                            .fill(item.hours > 0 ? Color.purple : Color.appMutedForeground.opacity(0.15))
                             .frame(height: max(4, CGFloat(item.hours / maxHours) * 100))
                         Text(item.label)
                             .font(.system(size: 10, weight: .regular))
@@ -1117,21 +1165,24 @@ struct AnalyticsView: View {
         .padding(.vertical, 8)
     }
 
-    // MARK: - Focus heatmap (day-of-week × hour)
+    // MARK: - Focus heatmap (day-of-week × 3h bucket)
 
-    private let heatmapHours = Array(5...23)
+    private let heatmapBuckets: [(label: String, start: Int)] = [
+        ("12am", 0), ("3am", 3), ("6am", 6), ("9am", 9),
+        ("12pm", 12), ("3pm", 15), ("6pm", 18), ("9pm", 21)
+    ]
     private let heatmapDays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
     private var heatmapData: [[Double]] {
         let calendar = Calendar.current
-        var grid = Array(repeating: Array(repeating: 0.0, count: 7), count: heatmapHours.count)
+        var grid = Array(repeating: Array(repeating: 0.0, count: 7), count: heatmapBuckets.count)
         for artifact in artifacts {
             guard let duration = artifact.totalDurationWorked else { continue }
             let weekday = calendar.component(.weekday, from: artifact.date)
             let hour = calendar.component(.hour, from: artifact.date)
-            guard let hourIdx = heatmapHours.firstIndex(of: hour) else { continue }
+            let bucketIdx = hour / 3
             let dayIdx = (weekday + 5) % 7  // Sun=1 → 6, Mon=2 → 0
-            grid[hourIdx][dayIdx] += duration / 60.0
+            grid[bucketIdx][dayIdx] += duration / 60.0
         }
         return grid
     }
@@ -1139,26 +1190,26 @@ struct AnalyticsView: View {
     private func heatmapColor(minutes: Double) -> Color {
         switch minutes {
         case 0: return Color.appTertiaryBackground
-        case ..<15: return Color.appForeground.opacity(0.20)
-        case ..<30: return Color.appForeground.opacity(0.42)
-        case ..<60: return Color.appForeground.opacity(0.68)
-        default: return Color.appForeground
+        case ..<15: return Color.purple.opacity(0.20)
+        case ..<30: return Color.purple.opacity(0.42)
+        case ..<60: return Color.purple.opacity(0.68)
+        default: return Color.purple
         }
     }
 
     private let heatmapLabelWidth: CGFloat = 28
-    private let heatmapCellGap: CGFloat = 2
-    private let heatmapCellHeight: CGFloat = 13
+    private let heatmapCellGap: CGFloat = 3
+    private let heatmapCellHeight: CGFloat = 18
 
     private var heatmapViewHeight: CGFloat {
-        let rows = CGFloat(heatmapHours.count + 1)
+        let rows = CGFloat(heatmapBuckets.count + 1)
         return rows * heatmapCellHeight + (rows - 1) * heatmapCellGap + 24
     }
 
     private var focusHeatmapCard: some View {
         let data = heatmapData
         return GeometryReader { geo in
-            let cellW = (geo.size.width - heatmapLabelWidth - CGFloat(6) * heatmapCellGap - 32) / 7
+            let cellW = (geo.size.width - heatmapLabelWidth - CGFloat(6) * heatmapCellGap) / 7
             VStack(alignment: .leading, spacing: heatmapCellGap) {
                 HStack(spacing: heatmapCellGap) {
                     Color.clear.frame(width: heatmapLabelWidth)
@@ -1169,22 +1220,20 @@ struct AnalyticsView: View {
                             .frame(width: cellW, alignment: .center)
                     }
                 }
-                ForEach(Array(heatmapHours.enumerated()), id: \.offset) { hIdx, hour in
+                ForEach(Array(heatmapBuckets.enumerated()), id: \.offset) { bIdx, bucket in
                     HStack(spacing: heatmapCellGap) {
-                        let label = hour == 12 ? "12p" : hour < 12 ? "\(hour)a" : "\(hour - 12)p"
-                        Text(hIdx % 3 == 0 ? label : "")
+                        Text(bucket.label)
                             .font(.system(size: 8, weight: .regular))
                             .foregroundStyle(Color.appMutedForeground)
                             .frame(width: heatmapLabelWidth, alignment: .trailing)
                         ForEach(0..<7, id: \.self) { dIdx in
                             Rectangle()
-                                .fill(heatmapColor(minutes: data[hIdx][dIdx]))
+                                .fill(heatmapColor(minutes: data[bIdx][dIdx]))
                                 .frame(width: cellW, height: heatmapCellHeight)
                         }
                     }
                 }
             }
-            .padding(.horizontal, 16)
             .padding(.vertical, 12)
         }
         .frame(height: heatmapViewHeight)
@@ -1194,13 +1243,14 @@ struct AnalyticsView: View {
 
     private var peakHours: [Int] {
         let calendar = Calendar.current
-        var hourMinutes: [Int: Double] = [:]
+        var bucketMinutes: [Int: Double] = [:]
         for artifact in artifacts {
             guard let duration = artifact.totalDurationWorked else { continue }
             let hour = calendar.component(.hour, from: artifact.date)
-            hourMinutes[hour, default: 0] += duration / 60.0
+            let bucket = (hour / 3) * 3
+            bucketMinutes[bucket, default: 0] += duration / 60.0
         }
-        return hourMinutes
+        return bucketMinutes
             .sorted { $0.value > $1.value }
             .prefix(2)
             .map(\.key)
@@ -1214,15 +1264,6 @@ struct AnalyticsView: View {
     private var peakHoursCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             let hours = peakHours
-            if hours.isEmpty {
-                Text("Log sessions at different times to find your peak.")
-                    .font(.caption)
-                    .foregroundStyle(Color.appMutedForeground)
-            } else {
-                Text("Most productive: " + hours.map { hourLabel($0) }.joined(separator: " · "))
-                    .font(.subheadline)
-                    .foregroundStyle(Color.appForeground)
-            }
 
             if !hours.isEmpty {
                 HStack {

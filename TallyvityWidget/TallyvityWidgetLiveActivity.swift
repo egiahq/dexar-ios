@@ -96,7 +96,7 @@ struct DexarWidgetLiveActivity: Widget {
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(context.state.isOvertime ? .red : (context.state.isWork ? .orange : .cyan))
                         .multilineTextAlignment(.trailing)
-                        .frame(maxWidth: 80, alignment: .trailing)
+                        .frame(width: 44, alignment: .trailing)
                 } minimal: {
                 Image(systemName: context.state.isWork ? "brain.head.profile" : "cup.and.saucer")
                     .foregroundStyle(context.state.isWork ? .orange : .cyan)

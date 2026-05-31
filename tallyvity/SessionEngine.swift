@@ -59,6 +59,7 @@ final class SessionEngine {
     }
 
     var totalLoops: Int = 4
+    var noBreak: Bool = false
 
     var workDuration: TimeInterval = 25 * 60
     var shortBreakDuration: TimeInterval = 5 * 60
@@ -82,6 +83,7 @@ final class SessionEngine {
     private(set) var progressPhotos: [Int: UIImage] = [:]
     private(set) var comparisonText: String = ""
     private(set) var progressPhotoLoops: Set<Int> = []
+    private(set) var reflectionTranscript: String = ""
 
     private let speech: SpeechEngine
     private let gemma: GemmaEngine
@@ -355,6 +357,7 @@ final class SessionEngine {
             progressPhotos = [:]
             comparisonText = ""
             spokenLine = ""
+            reflectionTranscript = ""
         }
     }
 
@@ -492,11 +495,36 @@ final class SessionEngine {
         speech.playCue(named: "rate")
     }
 
+    func toggleReflectionRecording() {
+        if isRecording {
+            recordingStopped = true
+        } else {
+            reflectionTranscript = ""
+            recordingStopped = false
+            isRecording = true
+            try? speech.startRecording()
+            Task {
+                let deadline = Date().addingTimeInterval(60)
+                while !recordingStopped && Date() < deadline {
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                withAnimation { isRecording = false }
+                let text = await speech.transcribeRecording()
+                withAnimation { self.reflectionTranscript = text }
+            }
+        }
+    }
+
     var isProcessingSpeech: Bool {
         switch speech.state {
-        case .transcribing, .speaking, .loadingModels: return true
+        case .transcribing, .speaking: return true
         default: return false
         }
+    }
+
+    var isVoiceLoading: Bool {
+        if case .loadingModels = speech.state { return true }
+        return false
     }
 
     // MARK: - Timer display helpers
@@ -515,7 +543,7 @@ final class SessionEngine {
         case .workActive, .backgroundPrep:
             total = workDuration
         case .breakTime:
-            total = completedLoops.count >= totalLoops ? longBreakDuration : shortBreakDuration
+            total = (totalLoops > 0 && completedLoops.count >= totalLoops) ? longBreakDuration : shortBreakDuration
         default:
             total = workDuration
         }
@@ -627,8 +655,7 @@ final class SessionEngine {
 
                 pendingPhoto = nil
                 photoSkipped = false
-                let deadline = Date().addingTimeInterval(15)
-                while !Task.isCancelled && !photoSkipped && !wantsToGoBackToGoal && Date() < deadline {
+                while !Task.isCancelled && !photoSkipped && !wantsToGoBackToGoal {
                     if let photo = pendingPhoto {
                         baselinePhoto = photo
                         break
@@ -747,7 +774,7 @@ final class SessionEngine {
 
             guard !Task.isCancelled else { return .finish }
 
-            let isLong = completedLoops.count >= totalLoops
+            let isLong = totalLoops > 0 && completedLoops.count >= totalLoops
             let breakDuration = isLong ? longBreakDuration : shortBreakDuration
             let breakMinutes = max(1, Int(round(breakDuration / 60)))
 
@@ -1215,7 +1242,7 @@ final class SessionEngine {
                 endLiveActivity()
                 guard !Task.isCancelled else { return }
                 
-                let isLong = completedLoops.count >= totalLoops
+                let isLong = totalLoops > 0 && completedLoops.count >= totalLoops
                 if isLong {
                     await capturePhotoDelta()
                     await finishSession()

@@ -7,6 +7,7 @@ struct SessionHistoryView: View {
 
     @State private var localArtifacts: [SessionArtifact] = []
     @State private var localCheckpoint: SessionStore.SessionCheckpoint?
+    @State private var selectedArtifact: SessionArtifact? = nil
 
     var body: some View {
         NavigationStack {
@@ -29,6 +30,15 @@ struct SessionHistoryView: View {
                 localArtifacts = SessionStore.shared.loadAll()
                 localCheckpoint = SessionStore.shared.loadCheckpoint()
             }
+            .sheet(item: $selectedArtifact) { artifact in
+                SessionReportView(
+                    loops: (artifact.loopDurations ?? []).enumerated().map { i, dur in
+                        LoopRecord(goalText: artifact.goal, answers: [], score: 0, scoreReason: "", duration: dur)
+                    },
+                    artifact: artifact,
+                    onDismiss: { selectedArtifact = nil }
+                )
+            }
         }
     }
 
@@ -48,8 +58,12 @@ struct SessionHistoryView: View {
                 Section {
                     ForEach(Array(localArtifacts.enumerated()), id: \.element.id) { idx, artifact in
                         VStack(alignment: .leading, spacing: 0) {
-                            artifactRow(artifact)
-                                .padding(.horizontal, 20)
+                            Button(action: { selectedArtifact = artifact }) {
+                                artifactRow(artifact)
+                                    .padding(.horizontal, 20)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
 
                             if idx < localArtifacts.count - 1 {
                                 Divider()
@@ -119,13 +133,19 @@ struct SessionHistoryView: View {
             }
 
             HStack(spacing: 16) {
-                Label("Loop \(cp.completedLoops.count + 1) of \(cp.totalLoops ?? 4)", systemImage: "repeat")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Image(systemName: "repeat")
+                    Text("Loop \(cp.completedLoops.count + 1) of \(cp.totalLoops ?? 4)")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
-                Label(cp.savedAt.formatted(.relative(presentation: .named)), systemImage: "clock")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Image(systemName: "clock")
+                    Text(cp.savedAt.formatted(.relative(presentation: .named)))
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             HStack(spacing: 10) {
@@ -159,10 +179,7 @@ struct SessionHistoryView: View {
             }
         }
         .padding(16)
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.appSecondaryBackground)
-        )
+        .background(Color.appSecondaryBackground)
     }
 
     private func artifactRow(_ artifact: SessionArtifact) -> some View {
@@ -186,35 +203,50 @@ struct SessionHistoryView: View {
 
             HStack(spacing: 16) {
                 let loopMax = artifact.totalLoops ?? artifact.loopsCompleted
-                Label("\(artifact.loopsCompleted)/\(loopMax)", systemImage: "repeat")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Image(systemName: "repeat")
+                    Text("\(artifact.loopsCompleted)/\(loopMax)")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
                 if let total = artifact.totalDurationWorked {
-                    Label(formatDuration(total), systemImage: "clock")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                        Text(formatDuration(total))
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
 
                 if let motivation = artifact.motivationLevel {
-                    Label("\(motivation)/5", systemImage: "bolt")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "bolt")
+                        Text("\(motivation)/5")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
 
                 if !artifact.blocker.isEmpty {
-                    Label("Blocked", systemImage: "exclamationmark.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    HStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.circle")
+                        Text("Blocked")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
 
             if let on = artifact.onTaskSeconds, let off = artifact.offTaskSeconds {
                 let total = on + off
                 let pct = total > 0 ? Int(on / total * 100) : 0
-                Label("\(pct)% on-task", systemImage: "eye")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Image(systemName: "eye")
+                    Text("\(pct)% on-task")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
             }
 
             if !artifact.intentNext.isEmpty {
