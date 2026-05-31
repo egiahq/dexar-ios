@@ -22,6 +22,9 @@ struct SessionArtifact: Codable, Identifiable {
     var totalDurationWorked: TimeInterval?
     var loopDurations: [TimeInterval]?
     var progressRating: Int?
+    var totalLoops: Int?
+    var onTaskSeconds: TimeInterval?
+    var offTaskSeconds: TimeInterval?
 }
 
 final class SessionStore {

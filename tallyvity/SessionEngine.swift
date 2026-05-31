@@ -215,6 +215,8 @@ final class SessionEngine {
         timerEndDate = nil
         sessionUserName = ""
         timerElapsed = 0
+        isOvertime = false
+        withAnimation { phase = .idle }
     }
 
     func forceEndSession() {
@@ -275,7 +277,8 @@ final class SessionEngine {
             closingSentence: "Session ended early.",
             finalAnswers: [],
             totalDurationWorked: totalDuration,
-            loopDurations: loopDurations
+            loopDurations: loopDurations,
+            totalLoops: totalLoops
         )
 
         store.save(artifact)
@@ -406,6 +409,20 @@ final class SessionEngine {
         goalCaptureContinuation = nil
     }
 
+    func backToGoalCapture() {
+        wantsToGoBackToGoal = true
+        recordingStopped = true
+        if let c = motivationContinuation {
+            motivationContinuation = nil
+            c.resume(returning: pendingMotivation ?? 3)
+        }
+        pendingMotivation = nil
+    }
+
+    func backToIdle() {
+        cancelSession()
+    }
+
     func updateGoal(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         currentGoal = trimmed.isEmpty ? currentGoal : trimmed
@@ -484,9 +501,13 @@ final class SessionEngine {
 
     // MARK: - Timer display helpers
 
+    private(set) var isOvertime: Bool = false
+
     var remainingTime: TimeInterval {
         if isActiveTimerPhase, let timerEndDate {
-            return max(0, timerEndDate.timeIntervalSinceNow)
+            let r = timerEndDate.timeIntervalSinceNow
+            if case .workActive = phase { return r }
+            return max(0, r)
         }
 
         let total: TimeInterval
@@ -542,13 +563,46 @@ final class SessionEngine {
 
         var sessionConfirmed = false
         while !sessionConfirmed && !Task.isCancelled {
-            wantsToGoBackToMotivation = false
+            wantsToGoBackToGoal = false
 
+            // 1. Goal capture (first)
+            var goalAccepted = false
+            while !goalAccepted && !Task.isCancelled {
+                wantsToRetryGoal = false
+                wantsToStartNow = false
+                withAnimation { phase = .goalCapture }
+                guard !Task.isCancelled else { return }
+
+                if !currentGoal.isEmpty && transcript.isEmpty {
+                    transcript = currentGoal
+                }
+
+                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+                    goalCaptureContinuation = cont
+                }
+                guard !Task.isCancelled else { return }
+
+                if Task.isCancelled { return }
+                if wantsToRetryGoal { continue }
+
+                currentGoal = transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Focus session" : transcript
+                shortGoal = String(currentGoal.prefix(20))
+                goalAccepted = true
+            }
+
+            guard !Task.isCancelled else { return }
+
+            // 2. Motivation selection
+            wantsToGoBackToGoal = false
             withAnimation { phase = .motivationSelection }
             let motivation = await waitForMotivation()
             guard !Task.isCancelled else { return }
+
+            if wantsToGoBackToGoal { continue }
+
             sessionMotivationLevel = motivation
 
+            // 3. Prepare audio
             withAnimation { phase = .preparingAudio }
             let speechReady = await speech.ensureReady()
             guard speechReady else {
@@ -562,38 +616,8 @@ final class SessionEngine {
             }
             originalWorkDuration = workDuration
 
-            wantsToGoBackToGoal = false
-
-            var goalAccepted = false
-            while !goalAccepted && !Task.isCancelled {
-                wantsToRetryGoal = false
-                wantsToStartNow = false
-                withAnimation { phase = .goalCapture }
-                await sayFixed(cue: "goal_prompt", fallback: PromptStore.shared.fallback(for: "goal_capture"))
-                guard !Task.isCancelled else { return }
-
-                if !currentGoal.isEmpty && transcript.isEmpty {
-                    transcript = currentGoal
-                }
-
-                await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
-                    goalCaptureContinuation = cont
-                }
-                guard !Task.isCancelled else { return }
-
-                if wantsToGoBackToMotivation { break }
-                if wantsToRetryGoal { continue }
-
-                currentGoal = transcript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Focus session" : transcript
-                shortGoal = String(currentGoal.prefix(20))
-                goalAccepted = true
-            }
-
-            if wantsToGoBackToMotivation { continue }
-            guard !Task.isCancelled else { return }
-
             if !wantsToStartNow {
-                // 2. Photo baseline
+                // 4. Photo baseline
                 await sayFixed(cue: "photo_baseline_prompt", fallback: selectVoiceLine(
                     cue: "photo_baseline",
                     fallback: photoPromptPresets,
@@ -604,7 +628,7 @@ final class SessionEngine {
                 pendingPhoto = nil
                 photoSkipped = false
                 let deadline = Date().addingTimeInterval(15)
-                while !Task.isCancelled && !photoSkipped && !wantsToGoBackToGoal && !wantsToGoBackToMotivation && Date() < deadline {
+                while !Task.isCancelled && !photoSkipped && !wantsToGoBackToGoal && Date() < deadline {
                     if let photo = pendingPhoto {
                         baselinePhoto = photo
                         break
@@ -613,17 +637,15 @@ final class SessionEngine {
                 }
 
                 guard !Task.isCancelled else { return }
-                if wantsToGoBackToMotivation { continue }
                 if wantsToGoBackToGoal { continue }
             }
 
-            // 3. Session ready — user confirms start or goes back to edit goal
+            // 5. Session ready — user confirms start or goes back to edit goal
             withAnimation { phase = .sessionReady }
             await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
                 startSessionContinuation = cont
             }
             guard !Task.isCancelled else { return }
-            if wantsToGoBackToMotivation { continue }
             if wantsToGoBackToGoal { continue }
 
             sessionConfirmed = true
@@ -656,6 +678,11 @@ final class SessionEngine {
         
         startLiveActivity(duration: workDuration, isWork: true, loopNumber: currentLoopNumber, endDate: workEndDate)
         let timerResult = await runTimer(duration: workDuration, totalDuration: workDuration, endDate: workEndDate)
+        if timerResult == .completed {
+            isOvertime = true
+            markLiveActivityOvertime(loopNumber: currentLoopNumber)
+        }
+        isOvertime = false
         currentLoopDuration += timerElapsed
         endLiveActivity()
         guard !Task.isCancelled else { updateScreenAwake(enabled: false); return .finish }
@@ -842,7 +869,8 @@ final class SessionEngine {
                 closingSentence: closing,
                 finalAnswers: finalAnswers,
                 totalDurationWorked: totalDuration,
-                loopDurations: loopDurations
+                loopDurations: loopDurations,
+                totalLoops: totalLoops
             )
             
             // Save in background
@@ -1313,6 +1341,17 @@ final class SessionEngine {
         Task { await activity.update(.init(state: state, staleDate: resolvedEndDate.addingTimeInterval(60))) }
     }
 
+    private func markLiveActivityOvertime(loopNumber: Int) {
+        guard let activity = liveActivity, let endDate = timerEndDate else { return }
+        let state = DexarAttributes.ContentState(
+            endDate: endDate,
+            isWork: true,
+            loopNumber: loopNumber,
+            isOvertime: true
+        )
+        Task { await activity.update(.init(state: state, staleDate: endDate.addingTimeInterval(120))) }
+    }
+
     private func schedulePhaseEndNotification(endDate: Date, isWork: Bool, loopNumber: Int) {
         let interval = max(1, endDate.timeIntervalSinceNow)
         let goal = currentGoal
@@ -1344,7 +1383,7 @@ final class SessionEngine {
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
-            content.sound = .default
+            content.sound = isWork ? .defaultCritical : .default
             content.userInfo = [
                 "phase": isWork ? "work" : "break",
                 "loopNumber": loopNumber,

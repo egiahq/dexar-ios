@@ -6,6 +6,7 @@ struct DexarAttributes: ActivityAttributes {
         var endDate: Date
         var isWork: Bool
         var loopNumber: Int
+        var isOvertime: Bool = false
     }
 
     var goal: String

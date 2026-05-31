@@ -7,10 +7,12 @@ struct TimerRingView: View {
 
     @State private var pulsing = false
 
+    private var isOvertime: Bool { remainingTime < 0 }
     private var remaining: Double { max(0, min(1, 1 - progress)) }
 
     private var arcColor: Color {
-        isWork
+        if isOvertime { return Color.appDestructive }
+        return isWork
             ? Color(hue: 0.06, saturation: 0.70, brightness: 0.92)
             : Color(hue: 0.36, saturation: 0.42, brightness: 0.70)
     }
@@ -38,7 +40,7 @@ struct TimerRingView: View {
                 Text(formattedTime)
                     .font(.system(size: size * 0.17, weight: .light, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isOvertime ? Color.appDestructive : .secondary)
             }
             .frame(width: size, height: size)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -51,10 +53,11 @@ struct TimerRingView: View {
     }
 
     private var formattedTime: String {
-        let total = max(0, Int(remainingTime.rounded()))
+        let negative = remainingTime < 0
+        let total = Int(abs(remainingTime).rounded())
         let minutes = total / 60
         let seconds = total % 60
-        return String(format: "%02d:%02d", minutes, seconds)
+        return (negative ? "-" : "") + String(format: "%02d:%02d", minutes, seconds)
     }
 }
 

@@ -30,7 +30,7 @@ struct RotaryTimePicker: View {
                 .foregroundStyle(Color.appMutedForeground.opacity(0.7))
 
             ZStack {
-                RoundedRectangle(cornerRadius: 10)
+                Rectangle()
                     .fill(Color.appTertiaryBackground)
                     .frame(height: itemHeight)
                     .padding(.horizontal, 8)

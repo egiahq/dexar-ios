@@ -55,18 +55,21 @@ struct DexarWidgetLiveActivity: Widget {
                 }
 
                 DynamicIslandExpandedRegion(.trailing) {
+                    let overtime = context.state.isOvertime
+                    let phaseColor: Color = overtime ? .red : (context.state.isWork ? .orange : .cyan)
                     VStack(alignment: .trailing, spacing: 4) {
-                        Text(context.state.isWork ? "FOCUS" : "BREAK")
+                        Text(overtime ? "OVERTIME" : (context.state.isWork ? "FOCUS" : "BREAK"))
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(context.state.isWork ? .orange : .cyan)
-                        
+                            .foregroundStyle(phaseColor)
+
                         HStack(spacing: 8) {
                             Image(systemName: context.state.isWork ? "brain.head.profile" : "cup.and.saucer")
                                 .font(.title3)
                             Text(context.state.endDate, style: .timer)
                                 .font(.title3.weight(.bold).monospacedDigit())
+                                .multilineTextAlignment(.trailing)
                         }
-                        .foregroundStyle(context.state.isWork ? .orange : .cyan)
+                        .foregroundStyle(phaseColor)
                     }
                     .padding(.trailing, 12)
                     .padding(.top, 10)
@@ -85,14 +88,15 @@ struct DexarWidgetLiveActivity: Widget {
 
                 } compactLeading: {
                     Image(systemName: context.state.isWork ? "brain.head.profile" : "cup.and.saucer")
-                        .foregroundStyle(context.state.isWork ? .orange : .cyan)
+                        .foregroundStyle(context.state.isOvertime ? .red : (context.state.isWork ? .orange : .cyan))
                         .font(.caption2.weight(.bold))
                 } compactTrailing: {
                     Text(context.state.endDate, style: .timer)
                         .monospacedDigit()
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(context.state.isWork ? .orange : .cyan)
-                        .frame(maxWidth: 48)
+                        .foregroundStyle(context.state.isOvertime ? .red : (context.state.isWork ? .orange : .cyan))
+                        .multilineTextAlignment(.trailing)
+                        .frame(maxWidth: 80, alignment: .trailing)
                 } minimal: {
                 Image(systemName: context.state.isWork ? "brain.head.profile" : "cup.and.saucer")
                     .foregroundStyle(context.state.isWork ? .orange : .cyan)

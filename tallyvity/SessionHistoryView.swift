@@ -185,7 +185,8 @@ struct SessionHistoryView: View {
             }
 
             HStack(spacing: 16) {
-                Label("\(artifact.loopsCompleted) loop\(artifact.loopsCompleted == 1 ? "" : "s")", systemImage: "repeat")
+                let loopMax = artifact.totalLoops ?? artifact.loopsCompleted
+                Label("\(artifact.loopsCompleted)/\(loopMax)", systemImage: "repeat")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -196,13 +197,7 @@ struct SessionHistoryView: View {
                 }
 
                 if let motivation = artifact.motivationLevel {
-                    Label("Mot: \(motivation)/5", systemImage: "bolt")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                if let progress = artifact.progressRating {
-                    Label("Prog: \(progress)/5", systemImage: "checkmark.circle")
+                    Label("\(motivation)/5", systemImage: "bolt")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -212,6 +207,14 @@ struct SessionHistoryView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+            }
+
+            if let on = artifact.onTaskSeconds, let off = artifact.offTaskSeconds {
+                let total = on + off
+                let pct = total > 0 ? Int(on / total * 100) : 0
+                Label("\(pct)% on-task", systemImage: "eye")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if !artifact.intentNext.isEmpty {

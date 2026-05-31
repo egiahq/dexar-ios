@@ -59,6 +59,14 @@ final class SettingsStore {
         didSet { defaults.set(onboardingComplete, forKey: "onboardingComplete") }
     }
 
+    var peakHourNotificationEnabled: Bool {
+        didSet { defaults.set(peakHourNotificationEnabled, forKey: "peakHourNotificationEnabled") }
+    }
+
+    var peakNotificationHours: [Int] {
+        didSet { defaults.set(peakNotificationHours, forKey: "peakNotificationHours") }
+    }
+
     init() {
         let m = defaults.string(forKey: "whisperModel") ?? ""
         whisperModel = WhisperModel(rawValue: m) ?? .tiny
@@ -66,5 +74,7 @@ final class SettingsStore {
         voice = Voice(rawValue: v) ?? .dylan
         userName = defaults.string(forKey: "userName") ?? ""
         onboardingComplete = defaults.bool(forKey: "onboardingComplete")
+        peakHourNotificationEnabled = defaults.bool(forKey: "peakHourNotificationEnabled")
+        peakNotificationHours = defaults.array(forKey: "peakNotificationHours") as? [Int] ?? []
     }
 }
