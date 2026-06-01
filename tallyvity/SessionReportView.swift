@@ -489,11 +489,11 @@ struct SessionReportView: View {
     }
 }
 
-struct ZoomableScrollView<Content: View>: UIViewRepresentable {
-    private var content: Content
+struct ZoomableScrollView: UIViewRepresentable {
+    private var content: AnyView
 
-    init(@ViewBuilder content: () -> Content) {
-        self.content = content()
+    init<Content: View>(@ViewBuilder content: () -> Content) {
+        self.content = AnyView(content())
     }
 
     func makeUIView(context: Context) -> UIScrollView {
@@ -531,7 +531,7 @@ struct ZoomableScrollView<Content: View>: UIViewRepresentable {
     }
 
     class Coordinator: NSObject, UIScrollViewDelegate {
-        var hostingController: UIHostingController<Content>?
+        var hostingController: UIHostingController<AnyView>?
 
         func viewForZooming(in scrollView: UIScrollView) -> UIView? {
             return hostingController?.view

@@ -278,7 +278,6 @@
 /* Begin PBXShellScriptBuildPhase section */
 		0E1291DD2F96EB7B0065D9E8 /* ShellScript */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
@@ -292,7 +291,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "find \"${CODESIGNING_FOLDER_PATH}/Frameworks\" -name \"*.dylib\" | while read dylib; do                                                               \n    codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" \"$dylib\"                                                                               \n  done\n";
+			shellScript = "find \"${CODESIGNING_FOLDER_PATH}/Frameworks\" -name \"*.dylib\" | while read dylib; do                                                               \n    if ! codesign -v \"$dylib\" 2>/dev/null; then                                                                                                    \n      codesign --force --sign \"${EXPANDED_CODE_SIGN_IDENTITY}\" \"$dylib\"                                                                           \n    fi                                                                                                                                             \n  done\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -343,7 +342,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = elano.dexar.app.DexarWidget;
+				PRODUCT_BUNDLE_IDENTIFIER = egia.dexar.ios.app.DexarWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -376,7 +375,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = elano.dexar.app.DexarWidget;
+				PRODUCT_BUNDLE_IDENTIFIER = egia.dexar.ios.app.DexarWidget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -426,7 +425,7 @@
 				DEVELOPMENT_TEAM = 9LKY7MBW4C;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -492,7 +491,7 @@
 				DEVELOPMENT_TEAM = 9LKY7MBW4C;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -540,7 +539,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = elano.dexar.app;
+				PRODUCT_BUNDLE_IDENTIFIER = egia.dexar.ios.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -583,7 +582,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0.1;
-				PRODUCT_BUNDLE_IDENTIFIER = elano.dexar.app;
+				PRODUCT_BUNDLE_IDENTIFIER = egia.dexar.ios.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
