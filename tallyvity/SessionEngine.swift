@@ -684,7 +684,6 @@ final class SessionEngine {
     var remainingTime: TimeInterval {
         if isActiveTimerPhase, let timerEndDate {
             let r = timerEndDate.timeIntervalSinceNow
-            if case .workActive = phase { return r }
             return max(0, r)
         }
 
@@ -852,12 +851,13 @@ final class SessionEngine {
         if timerResult == .completed {
             isOvertime = true
             markLiveActivityOvertime(loopNumber: currentLoopNumber)
+        } else {
+            isOvertime = false
+            endLiveActivity()
         }
-        isOvertime = false
         currentLoopDuration += timerElapsed
-        endLiveActivity()
-        guard !Task.isCancelled else { updateScreenAwake(enabled: false); return .finish }
-        guard timerResult != .cancelled else { updateScreenAwake(enabled: false); return .finish }
+        guard !Task.isCancelled else { isOvertime = false; endLiveActivity(); updateScreenAwake(enabled: false); return .finish }
+        guard timerResult != .cancelled else { isOvertime = false; endLiveActivity(); updateScreenAwake(enabled: false); return .finish }
 
         withAnimation { phase = .roundEnd }
         haptic.impactOccurred(intensity: 0.7)
@@ -871,6 +871,8 @@ final class SessionEngine {
             await sayFixed(cue: "starter_continue_prompt", fallback: PromptStore.shared.fallback(for: "starter_continue"))
             let decision = await listen(maxDuration: 6).lowercased()
             if decision.contains("no") || decision.contains("stop") {
+                isOvertime = false
+                endLiveActivity()
                 return .finish
             }
             workDuration = 25 * 60
@@ -883,7 +885,7 @@ final class SessionEngine {
         guard !Task.isCancelled else { return .finish }
 
         withAnimation { phase = .roundEnd }
-        timerEndDate = nil // No active timer during round end
+        timerEndDate = nil
         persistCheckpoint()
 
         let choice: RoundEndChoice
@@ -896,6 +898,7 @@ final class SessionEngine {
             }
         }
 
+        isOvertime = false
         guard !Task.isCancelled else { return .finish }
 
         switch choice {
@@ -920,13 +923,14 @@ final class SessionEngine {
 
             let isLong = totalLoops > 0 && completedLoops.count >= totalLoops
             let breakDuration = isLong ? longBreakDuration : shortBreakDuration
-            let breakMinutes = max(1, Int(round(breakDuration / 60)))
-
-            sayFixedNonBlocking(cue: "break_start_prompt", fallback: selectVoiceLine(
-                cue: "break_start",
-                fallback: breakPromptPresets,
-                replacements: ["breakMinutes": "\(breakMinutes) minutes", "goal": currentGoal]
-            ))
+            if breakDuration > 0 {
+                let breakMinutes = max(1, Int(round(breakDuration / 60)))
+                sayFixedNonBlocking(cue: "break_start_prompt", fallback: selectVoiceLine(
+                    cue: "break_start",
+                    fallback: breakPromptPresets,
+                    replacements: ["breakMinutes": "\(breakMinutes) minutes", "goal": currentGoal]
+                ))
+            }
 
             if !isLong { currentLoopNumber += 1 }
             timerEndDate = nil
@@ -1327,6 +1331,7 @@ final class SessionEngine {
         shortBreakDuration = checkpoint.shortBreakDuration
         longBreakDuration = checkpoint.longBreakDuration
         originalWorkDuration = checkpoint.workDuration
+        noBreak = shortBreakDuration == 0
         needsStarterDecision = (sessionMotivationLevel ?? 5) <= 2
 
         // Restore timer state: Live Activity is the absolute source of truth if available
@@ -1456,10 +1461,16 @@ final class SessionEngine {
                 timerEndDate = endDate
                 startLiveActivity(duration: remaining, isWork: true, loopNumber: currentLoopNumber, endDate: endDate)
                 let timerResult = await runTimer(duration: remaining, totalDuration: workDuration, endDate: endDate)
+                if timerResult == .completed {
+                    isOvertime = true
+                    markLiveActivityOvertime(loopNumber: currentLoopNumber)
+                } else {
+                    isOvertime = false
+                    endLiveActivity()
+                }
                 currentLoopDuration += timerElapsed
-                endLiveActivity()
                 updateScreenAwake(enabled: false)
-                guard !Task.isCancelled && timerResult != .cancelled else { return }
+                guard !Task.isCancelled && timerResult != .cancelled else { isOvertime = false; endLiveActivity(); return }
                 
                 withAnimation { phase = .roundEnd }
                 if timerResult == .completed || timerResult == .skipped {
@@ -1563,7 +1574,17 @@ final class SessionEngine {
             loopNumber: loopNumber,
             isOvertime: true
         )
-        Task { await activity.update(.init(state: state, staleDate: endDate.addingTimeInterval(120))) }
+        let alert = AlertConfiguration(
+            title: "Focus Loop Complete",
+            body: "Time's up! Wrap up loop \(loopNumber).",
+            sound: .named("end.wav")
+        )
+        let content = ActivityContent(
+            state: state,
+            staleDate: endDate.addingTimeInterval(120),
+            relevanceScore: 100
+        )
+        Task { await activity.update(content, alertConfiguration: alert) }
     }
 
     private func schedulePhaseEndNotification(endDate: Date, isWork: Bool, loopNumber: Int) {
@@ -1597,7 +1618,11 @@ final class SessionEngine {
             let content = UNMutableNotificationContent()
             content.title = title
             content.body = body
-            content.sound = isWork ? .defaultCritical : .default
+            if isWork {
+                content.sound = UNNotificationSound(named: UNNotificationSoundName("end.wav"))
+            } else {
+                content.sound = .default
+            }
             content.userInfo = [
                 "phase": isWork ? "work" : "break",
                 "loopNumber": loopNumber,

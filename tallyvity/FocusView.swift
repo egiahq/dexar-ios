@@ -868,7 +868,7 @@ struct FocusView: View {
                 Button(action: {
                     session.selectRoundEndAction(.startBreak)
                 }) {
-                    Text("Start break")
+                    Text(session.noBreak ? (session.currentLoopNumber >= session.totalLoops ? "Finish session" : "Next loop") : "Start break")
                         .font(.headline.weight(.medium))
                         .foregroundStyle(Color(red: 0.3, green: 0.55, blue: 0.38))
                         .frame(maxWidth: .infinity)

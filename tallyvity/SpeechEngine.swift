@@ -226,7 +226,10 @@ final class SpeechEngine {
 
         for ext in extensions {
             candidates += [
+                Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "SFX"),
                 Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "sfx"),
+                Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Assets/SFX"),
+                Bundle.main.url(forResource: name, withExtension: ext, subdirectory: "Assets/sfx"),
                 Bundle.main.url(forResource: "\(voiceDir)_\(name)", withExtension: ext, subdirectory: "Audio/\(voiceDir)"),
                 Bundle.main.url(forResource: "\(voiceDir)_\(name)", withExtension: ext, subdirectory: voiceDir),
                 Bundle.main.url(forResource: "\(voiceDir)_\(name)", withExtension: ext),

@@ -26,10 +26,17 @@ struct DexarWidgetLiveActivity: Widget {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text(context.state.endDate, style: .timer)
-                        .font(.title2.weight(.light).monospacedDigit())
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.trailing)
+                    if context.state.isOvertime {
+                        Text("00:00")
+                            .font(.title2.weight(.light).monospacedDigit())
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.trailing)
+                    } else {
+                        Text(context.state.endDate, style: .timer)
+                            .font(.title2.weight(.light).monospacedDigit())
+                            .foregroundStyle(.primary)
+                            .multilineTextAlignment(.trailing)
+                    }
 
                     Text("Loop \(context.state.loopNumber) of \(context.attributes.totalLoops)")
                         .font(.caption2)
@@ -65,9 +72,15 @@ struct DexarWidgetLiveActivity: Widget {
                         HStack(spacing: 8) {
                             Image(systemName: context.state.isWork ? "brain.head.profile" : "cup.and.saucer")
                                 .font(.title3)
-                            Text(context.state.endDate, style: .timer)
-                                .font(.title3.weight(.bold).monospacedDigit())
-                                .multilineTextAlignment(.trailing)
+                            if overtime {
+                                Text("00:00")
+                                    .font(.title3.weight(.bold).monospacedDigit())
+                                    .multilineTextAlignment(.trailing)
+                            } else {
+                                Text(context.state.endDate, style: .timer)
+                                    .font(.title3.weight(.bold).monospacedDigit())
+                                    .multilineTextAlignment(.trailing)
+                            }
                         }
                         .foregroundStyle(phaseColor)
                     }
@@ -91,15 +104,24 @@ struct DexarWidgetLiveActivity: Widget {
                         .foregroundStyle(context.state.isOvertime ? .red : (context.state.isWork ? .orange : .cyan))
                         .font(.caption2.weight(.bold))
                 } compactTrailing: {
-                    Text(context.state.endDate, style: .timer)
-                        .monospacedDigit()
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(context.state.isOvertime ? .red : (context.state.isWork ? .orange : .cyan))
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 44, alignment: .trailing)
+                    if context.state.isOvertime {
+                        Text("00:00")
+                            .monospacedDigit()
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 44, alignment: .trailing)
+                    } else {
+                        Text(context.state.endDate, style: .timer)
+                            .monospacedDigit()
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(context.state.isWork ? .orange : .cyan)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 44, alignment: .trailing)
+                    }
                 } minimal: {
                 Image(systemName: context.state.isWork ? "brain.head.profile" : "cup.and.saucer")
-                    .foregroundStyle(context.state.isWork ? .orange : .cyan)
+                    .foregroundStyle(context.state.isOvertime ? .red : (context.state.isWork ? .orange : .cyan))
                     .font(.caption2.weight(.bold))
             }
         }
